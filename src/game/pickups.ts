@@ -3,8 +3,30 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { ARENA_RADIUS, clamp } from './config';
 import type { Game } from './game';
 
-export type PickupKind = 'xp' | 'coin' | 'shard' | 'heal' | 'magnet';
-const KINDS: PickupKind[] = ['xp', 'coin', 'shard', 'heal', 'magnet'];
+export type PickupKind =
+  | 'xp'
+  | 'coin'
+  | 'shard'
+  | 'heal'
+  | 'magnet'
+  | 'overdrive'
+  | 'invuln'
+  | 'emp'
+  | 'overcharge'
+  | 'dark_matter';
+
+const KINDS: PickupKind[] = [
+  'xp',
+  'coin',
+  'shard',
+  'heal',
+  'magnet',
+  'overdrive',
+  'invuln',
+  'emp',
+  'overcharge',
+  'dark_matter',
+];
 
 interface Pickup {
   active: boolean;
@@ -41,7 +63,18 @@ export class PickupSystem {
   private meshes: Record<PickupKind, THREE.InstancedMesh>;
   private dummy = new THREE.Object3D();
   private time = 0;
-  private caps: Record<PickupKind, number> = { xp: 700, coin: 200, shard: 60, heal: 20, magnet: 10 };
+  private caps: Record<PickupKind, number> = {
+    xp: 700,
+    coin: 200,
+    shard: 60,
+    heal: 20,
+    magnet: 10,
+    overdrive: 6,
+    invuln: 6,
+    emp: 6,
+    overcharge: 6,
+    dark_matter: 6,
+  };
   private max = 1000;
 
   constructor(scene: THREE.Scene) {
@@ -128,12 +161,57 @@ export class PickupSystem {
       new THREE.OctahedronGeometry(0.12, 0),
     ]);
 
+    // 6. Overdrive Temporal (Anel de Chronos com prisma taquiônico)
+    const overdriveGeo = mergeParts([
+      new THREE.TorusGeometry(0.34, 0.05, 8, 24),
+      new THREE.OctahedronGeometry(0.20, 0).scale(0.8, 1.4, 0.8),
+      new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6),
+    ]);
+
+    // 7. Escudo de Invulnerabilidade Quântica (Aegis prismática lapidada)
+    const invulnGeo = mergeParts([
+      new THREE.DodecahedronGeometry(0.26, 0),
+      new THREE.TorusGeometry(0.36, 0.04, 6, 20).rotateX(Math.PI / 2),
+      new THREE.ConeGeometry(0.12, 0.4, 4).translate(0, 0.28, 0),
+      new THREE.ConeGeometry(0.12, 0.4, 4).rotateX(Math.PI).translate(0, -0.28, 0),
+    ]);
+
+    // 8. Bomba EMP Orbital (Ogiva com anéis e espigões eletromagnéticos)
+    const empGeo = mergeParts([
+      new THREE.CylinderGeometry(0.18, 0.18, 0.4, 8),
+      new THREE.SphereGeometry(0.16, 8, 8),
+      new THREE.BoxGeometry(0.55, 0.06, 0.06),
+      new THREE.BoxGeometry(0.06, 0.06, 0.55),
+      new THREE.TorusGeometry(0.28, 0.03, 6, 16).rotateX(Math.PI / 2),
+    ]);
+
+    // 9. Núcleo de Sobrecarga Plasmática (Reator de fissão em chamas)
+    const overchargeGeo = mergeParts([
+      new THREE.OctahedronGeometry(0.24, 0).scale(1.2, 1.2, 1.2),
+      new THREE.TorusGeometry(0.34, 0.045, 6, 18),
+      new THREE.TorusGeometry(0.24, 0.035, 6, 16).rotateX(Math.PI / 2),
+      new THREE.SphereGeometry(0.12, 6, 6),
+    ]);
+
+    // 10. Super Ímã de Matéria Escura (Vórtice com anéis gravitacionais cruzados)
+    const darkMatterGeo = mergeParts([
+      new THREE.IcosahedronGeometry(0.22, 0),
+      new THREE.TorusGeometry(0.36, 0.035, 6, 20).rotateX(0.5),
+      new THREE.TorusGeometry(0.36, 0.035, 6, 20).rotateX(-0.5),
+      new THREE.OctahedronGeometry(0.14, 0).scale(0.6, 1.5, 0.6),
+    ]);
+
     this.meshes = {
       xp: mk(xpGeo, this.caps.xp, 1.4, 0.45, 0.18),
       coin: mk(coinGeo, this.caps.coin, 1.2, 0.8, 0.22),
       shard: mk(shardGeo, this.caps.shard, 1.6, 0.4, 0.15),
       heal: mk(healGeo, this.caps.heal, 1.3, 0.35, 0.22),
       magnet: mk(magnetGeo, this.caps.magnet, 1.2, 0.7, 0.2),
+      overdrive: mk(overdriveGeo, this.caps.overdrive, 1.5, 0.3, 0.15),
+      invuln: mk(invulnGeo, this.caps.invuln, 1.6, 0.8, 0.18),
+      emp: mk(empGeo, this.caps.emp, 1.5, 0.5, 0.2),
+      overcharge: mk(overchargeGeo, this.caps.overcharge, 1.6, 0.4, 0.15),
+      dark_matter: mk(darkMatterGeo, this.caps.dark_matter, 1.7, 0.2, 0.12),
     };
   }
 
@@ -188,7 +266,7 @@ export class PickupSystem {
       p.rot += dt * (p.kind === 'coin' ? 4 : 2.2);
       const dx = pl.x - p.x, dz = pl.z - p.z;
       const d2 = dx * dx + dz * dz;
-      if (!p.magnet && pl.alive && (d2 < mr2 || (p.kind === 'magnet' || p.kind === 'heal') && d2 < 6)) p.magnet = true;
+      if (!p.magnet && pl.alive && (d2 < mr2 || (p.kind === 'magnet' || p.kind === 'heal' || p.kind === 'overdrive' || p.kind === 'invuln' || p.kind === 'emp' || p.kind === 'overcharge' || p.kind === 'dark_matter') && d2 < 7)) p.magnet = true;
       if (p.magnet && pl.alive) {
         const d = Math.sqrt(d2) || 0.001;
         p.speed = Math.min(46, p.speed + dt * 70);
@@ -218,7 +296,18 @@ export class PickupSystem {
   }
 
   private render() {
-    const counts: Record<PickupKind, number> = { xp: 0, coin: 0, shard: 0, heal: 0, magnet: 0 };
+    const counts: Record<PickupKind, number> = {
+      xp: 0,
+      coin: 0,
+      shard: 0,
+      heal: 0,
+      magnet: 0,
+      overdrive: 0,
+      invuln: 0,
+      emp: 0,
+      overcharge: 0,
+      dark_matter: 0,
+    };
     const d = this.dummy;
     for (const p of this.pool) {
       if (!p.active) continue;
@@ -232,6 +321,11 @@ export class PickupSystem {
       if (p.kind === 'xp') s = p.value >= 20 ? 1.8 : p.value >= 8 ? 1.45 : p.value >= 3 ? 1.2 : 1;
       if (p.kind === 'coin') d.rotation.set(0.25, p.rot, 0);
       else if (p.kind === 'magnet') d.rotation.set(0.4, p.rot, Math.sin(p.rot) * 0.3);
+      else if (p.kind === 'overdrive') d.rotation.set(0.3, p.rot * 1.5, Math.sin(p.rot) * 0.2);
+      else if (p.kind === 'invuln') d.rotation.set(0.2, p.rot, Math.cos(p.rot) * 0.2);
+      else if (p.kind === 'emp') d.rotation.set(0, p.rot * 2, 0);
+      else if (p.kind === 'overcharge') d.rotation.set(p.rot * 1.2, p.rot * 1.5, 0);
+      else if (p.kind === 'dark_matter') d.rotation.set(Math.sin(p.rot) * 0.4, p.rot * 2, Math.cos(p.rot) * 0.4);
       else d.rotation.set(0, p.rot, p.kind === 'shard' ? Math.sin(p.rot * 0.5) * 0.4 : 0);
       d.scale.setScalar(s * (p.magnet ? 0.85 : 1));
       d.updateMatrix();
@@ -244,7 +338,12 @@ export class PickupSystem {
       } else if (p.kind === 'coin') tmpColor.setHex(0xffc040);
       else if (p.kind === 'shard') tmpColor.setHex(0xff60ff);
       else if (p.kind === 'heal') tmpColor.setHex(0x40ff90);
-      else tmpColor.setHex(0xa0e0ff);
+      else if (p.kind === 'magnet') tmpColor.setHex(0xa0e0ff);
+      else if (p.kind === 'overdrive') tmpColor.setHex(0x00f0ff);
+      else if (p.kind === 'invuln') tmpColor.setHex(0xffd700);
+      else if (p.kind === 'emp') tmpColor.setHex(0xa855f7);
+      else if (p.kind === 'overcharge') tmpColor.setHex(0xff5500);
+      else if (p.kind === 'dark_matter') tmpColor.setHex(0xf43f5e);
       const k = 1.05 * blink;
       mesh.instanceColor!.setXYZ(i, clamp(tmpColor.r * k, 0, 2.5), clamp(tmpColor.g * k, 0, 2.5), clamp(tmpColor.b * k, 0, 2.5));
       counts[p.kind]++;

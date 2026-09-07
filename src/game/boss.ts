@@ -24,6 +24,8 @@ export class Boss {
   radius = 4.8;
   hp: number;
   maxHp: number;
+  shield = 32000;
+  maxShield = 32000;
   phase = 1;
   state: BossState = 'enter';
   hittable = false;
@@ -64,8 +66,10 @@ export class Boss {
 
   constructor(scene: THREE.Scene, x: number, z: number) {
     this.x = x; this.z = z;
-    this.maxHp = 42000;
+    this.maxHp = 110000;
     this.hp = this.maxHp;
+    this.maxShield = 32000;
+    this.shield = this.maxShield;
     this.dmgMul = enemyDmgMul(BOSS_WAVE);
 
     this.coreMat = new THREE.ShaderMaterial({
@@ -304,11 +308,37 @@ export class Boss {
   hit(amount: number, crit: boolean, game: Game, kind: 'normal' | 'love' = 'normal'): boolean {
     if (!this.hittable || this.state === 'dying' || this.state === 'dead') return false;
     if (this.curse > 0) amount *= this.curseMult;
+
+    // Redução inata de dano do Chefe (25% armadura estelar)
+    amount *= 0.75;
+
+    // Limitador de pico de dano por acerto (máx 2.2% do HP total)
+    const maxSingleHit = this.maxHp * 0.022;
+    if (amount > maxSingleHit) {
+      amount = maxSingleHit + (amount - maxSingleHit) * 0.20;
+    }
+
+    // Absorção de Escudo de Fase do Chefe (+60% quebra com Projéteis de Antimatéria)
+    if (this.shield > 0) {
+      const antimatter = (game.player?.upgrades?.antimatter_rounds ?? 0) > 0;
+      const shieldMult = antimatter ? 1.6 : 1.0;
+      const sDmg = amount * shieldMult;
+      const abs = Math.min(this.shield, sDmg);
+      this.shield -= abs;
+      amount = Math.max(0, amount - (abs / shieldMult));
+      game.particles.burst(this.x + rand(-1.5, 1.5), this.y + 1.8, this.z + rand(-1.5, 1.5), 6, 0x4d8dff, { speed: 5, life: 0.35, size: 0.3, gravity: 0 });
+      if (amount <= 0) {
+        this.flash = 0.5;
+        return false;
+      }
+    }
+
     this.hp -= amount;
     this.flash = 1;
     game.numbers.spawn(this.x + rand(-2, 2), this.y + 2, this.z, amount, kind === 'love' ? 'love' : (crit ? 'crit' : 'normal'));
     if (this.hp <= 0) {
       this.hp = 0;
+      this.shield = 0;
       this.startDying(game);
       return true;
     }
@@ -322,6 +352,8 @@ export class Boss {
     this.state = 'transition';
     this.transT = 0;
     this.hittable = false;
+    this.shield = this.maxShield * (phase === 2 ? 0.75 : 1.0);
+    game.particles.ring(this.x, this.y + 1, this.z, 40, phase === 2 ? 0xffc040 : 0xff2050, 4.5, 10, 0.7, 0.4);
     this.endPattern();
     game.projectiles.clearAll(true);
     game.audio.bossPhase();

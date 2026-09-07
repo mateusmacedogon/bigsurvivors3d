@@ -115,6 +115,12 @@ export class Player {
   noDampeners = false;
   celestialShield = 0;
   bigAfterburnerTick = 0;
+  damageFreeTimer = 0;
+  ablativeReady = true;
+  ablativeTimer = 0;
+  phaseShieldCd = 0;
+  empTimer = 9.0;
+  staticShotCounter = 0;
   private dashKineticHits = new Set<number>();
   dashCd = 0; dashMax = 1.5; dashTimer = 0; private dashDirX = 0; private dashDirZ = 1; private ghostTimer = 0;
   godMode = false;
@@ -231,26 +237,46 @@ export class Player {
     const bigSpeedAsc = this.ascensionPerk === 'big_lightning_interceptor' ? 1.30 : 1.0;
     const ottonHpAsc = this.ascensionPerk === 'otton_armored_colossus' ? 120 : 0;
     const ottonArmorAsc = this.ascensionPerk === 'otton_armored_colossus' ? 2.0 : 1.0;
+
+    // Curvas matemáticas com retornos decrescentes (Soft Caps) para balanceamento do late-game
+    const rawDmgPct = m.dmg + pct('damage');
+    const effDmgPct = rawDmgPct <= 0.80 ? rawDmgPct : 0.80 + 0.55 * Math.log1p((rawDmgPct - 0.80) * 0.85);
+
+    const rawFireratePct = pct('firerate') + furyBonus;
+    const effFireratePct = rawFireratePct <= 0.60 ? rawFireratePct : Math.min(1.20, 0.60 + (rawFireratePct - 0.60) / (1 + (rawFireratePct - 0.60) * 1.5));
+
+    const rawCrit = 0.05 + pct('crit');
+    const effCrit = rawCrit <= 0.35 ? rawCrit : Math.min(0.75, 0.35 + (rawCrit - 0.35) / (1 + (rawCrit - 0.35) * 2.2));
+
+    const rawLs = pct('lifesteal');
+    const effLs = rawLs <= 0.02 ? rawLs : Math.min(0.04, 0.02 + (rawLs - 0.02) * 0.25);
+
+    const rawSpeedPct = m.speed + pct('speed');
+    const effSpeedPct = rawSpeedPct <= 0.45 ? rawSpeedPct : Math.min(0.85, 0.45 + (rawSpeedPct - 0.45) / (1 + (rawSpeedPct - 0.45) * 1.8));
+
+    const anomalyMagnet = (u.anomaly_detector ?? 0) > 0 ? 1.4 : 1.0;
+    const laserSuper = (u.supercharge_laser ?? 0) > 0 ? 1 : 0;
+
     return {
       maxHp: h.hp + m.hp + (u.maxhp ?? 0) + ottonHpAsc,
-      speed: h.speed * (1 + m.speed + pct('speed')) * this.speedBuffMult * (1 + trapBonus * 0.04) * (1 + furyBonus) * this.hyperModeMult * bigSpeedAsc,
-      damage: h.damage * (1 + m.dmg + pct('damage')) * (1 + trapBonus * 0.04),
-      fireRate: (1 + pct('firerate')) * (1 + furyBonus),
-      magnet: 5.5 * (1 + m.magnet + pct('magnet')),
+      speed: h.speed * (1 + effSpeedPct) * this.speedBuffMult * (1 + trapBonus * 0.04) * (1 + furyBonus) * this.hyperModeMult * bigSpeedAsc,
+      damage: h.damage * (1 + effDmgPct) * (1 + trapBonus * 0.04),
+      fireRate: 1 + effFireratePct,
+      magnet: 5.5 * (1 + m.magnet + pct('magnet')) * anomalyMagnet,
       armor: (m.armor + (u.armor ?? 0)) * ottonArmorAsc,
       xpMult: 1 + m.xp + pct('xpgain'),
       ultCd: Math.max(0.3, 1 - m.ultcd - pct('ultcd') - rapidSiloReduc),
       luck: m.luck,
-      critChance: 0.05 + pct('crit'),
-      lifesteal: pct('lifesteal'),
+      critChance: effCrit,
+      lifesteal: effLs,
       multishot: u.multishot ?? 0,
-      pierce: u.pierce ?? 0,
+      pierce: (u.pierce ?? 0) + laserSuper,
       ricochet: u.ricochet ?? 0,
       drones: u.drone ?? 0,
       burnChance: pct('burn'),
       freezeChance: pct('freeze'),
-      area: 1 + pct('area'),
-      projSpeed: (1 + pct('projspeed')) * (h.id === 'big' ? 1 + (u.hero_big_plasma_accelerator ?? 0) * 0.35 : 1),
+      area: (1 + pct('area')) * (laserSuper ? 1.2 : 1.0),
+      projSpeed: (1 + pct('projspeed')) * (laserSuper ? 1.2 : 1.0) * (h.id === 'big' ? 1 + (u.hero_big_plasma_accelerator ?? 0) * 0.35 : 1),
       regen: u.regen ?? 0,
       explosive: pct('explosive'),
       knockback: (1 + pct('knockback')) * ottonBleedKnock,
@@ -353,6 +379,36 @@ export class Player {
 
   takeDamage(amount: number, sx: number, sz: number, game?: Game): number {
     if (this.invulnerable) return 0;
+
+    // Blindagem Ablativa: anula o golpe a cada 12s
+    if ((this.upgrades.ablative_armor ?? 0) > 0 && this.ablativeReady) {
+      this.ablativeReady = false;
+      this.ablativeTimer = 12.0;
+      this.damageFreeTimer = 0;
+      if (game) {
+        game.audio.shieldHit();
+        game.notice('BLINDAGEM ABLATIVA!', 'Dano completamente anulado!', '#38bdf8');
+        game.shockwaves.spawn(this.x, this.z, 0x38bdf8, { endR: 6, duration: 0.4 });
+        game.particles.burst(this.x, 1.2, this.z, 20, 0x38bdf8, { speed: 8, life: 0.5, size: 0.4 });
+      }
+      return 0;
+    }
+
+    // Campo de Deflexão Cinética: chance percentual de defletir o ataque
+    const deflectChance = Math.min(0.36, (this.upgrades.deflection_field ?? 0) * 0.12);
+    if (deflectChance > 0 && Math.random() < deflectChance) {
+      this.damageFreeTimer = 0;
+      if (game) {
+        game.audio.shieldHit();
+        game.vfx.impact(this.x, 1.0, this.z, 0x00ffff, 0, 0, true);
+        game.shockwaves.spawn(this.x, this.z, 0x00ffff, { endR: 5, duration: 0.3 });
+        game.numbers.spawn(this.x, 1.8, this.z, 0, 'crit');
+      }
+      return 0;
+    }
+
+    this.damageFreeTimer = 0;
+
     const maxReduction = amount * 0.60;
     const reduction = Math.min(this.stats.armor, maxReduction);
     amount = Math.max(1, amount - reduction);
@@ -367,6 +423,34 @@ export class Player {
       amount -= absorbed;
       if (amount <= 0) return 0;
     }
+    // Barreira de Fase de Emergência: invulnerabilidade temporária e turbo de fuga ao tomar dano
+    if ((this.upgrades.phase_shield ?? 0) > 0 && this.phaseShieldCd <= 0) {
+      this.invulnTimer = 1.2;
+      this.phaseShieldCd = 9.0;
+      this.applySpeedBuff(1.35, 1.8);
+      if (game) {
+        game.notice('BARREIRA DE FASE!', 'Invulnerabilidade de emergência ativada!', '#a855f7');
+        game.shockwaves.spawn(this.x, this.z, 0xa855f7, { endR: 7, duration: 0.4 });
+      }
+    }
+    // Casco Reativo de Espinhos de Plasma: contra-ataque em 360 graus
+    if ((this.upgrades.reactive_thorns ?? 0) > 0 && game) {
+      const thornCount = 8;
+      const thornDmg = this.stats.damage * 1.5;
+      for (let ti = 0; ti < thornCount; ti++) {
+        const ta = (ti / thornCount) * Math.PI * 2;
+        game.projectiles.spawn({
+          kind: 'laser',
+          x: this.x, z: this.z, y: 1.0,
+          vx: Math.sin(ta) * 36, vz: Math.cos(ta) * 36,
+          dmg: thornDmg, life: 0.6, radius: 0.4,
+          pierce: 3, ricochet: 1, color: 0xff0066,
+          trail: 0.3, knock: 12, scale: 1.2,
+          weaponSource: 'reactive_thorns',
+        });
+      }
+      game.shockwaves.spawn(this.x, this.z, 0xff0066, { endR: 8, duration: 0.35, thick: true });
+    }
     // Reflexão do Colosso Blindado
     if (this.ascensionPerk === 'otton_armored_colossus' && game) {
       const reflectDmg = amount * 0.4;
@@ -378,7 +462,7 @@ export class Player {
       game.shockwaves.spawn(this.x, this.z, 0xff4a2a, { endR: 6.5, duration: 0.35 });
     }
     this.hp -= amount;
-    this.invulnTimer = 0.45;
+    this.invulnTimer = Math.max(this.invulnTimer, 0.45);
     const dx = sx - this.x, dz = sz - this.z;
     const d = Math.hypot(dx, dz) || 1;
     (this.shieldMat.uniforms.uImpact.value as THREE.Vector3).set(dx / d, 0.2, dz / d);
@@ -428,6 +512,53 @@ export class Player {
       if (this.speedBuffTimer <= 0) {
         this.speedBuffMult = 1;
         this.stats = this.computeStats();
+      }
+    }
+
+    // Nanitas Reparadores: regenera HP gradualmente após 4s sem levar dano
+    this.damageFreeTimer += dt;
+    if ((this.upgrades.repair_nanites ?? 0) > 0 && this.damageFreeTimer >= 4.0 && this.hp < s.maxHp) {
+      this.heal(3.5 * dt);
+      if (Math.random() < dt * 2) {
+        game.particles.burst(this.x + rand(-0.6, 0.6), 1.2, this.z + rand(-0.6, 0.6), 2, 0x40ff90, { speed: 1.5, life: 0.4, size: 0.2 });
+      }
+    }
+
+    // Blindagem Ablativa: recarrega a placa protetora a cada 12s
+    if (!this.ablativeReady && (this.upgrades.ablative_armor ?? 0) > 0) {
+      this.ablativeTimer -= dt;
+      if (this.ablativeTimer <= 0) {
+        this.ablativeReady = true;
+        game.audio.shieldHit();
+        game.notice('BLINDAGEM ABLATIVA PRONTA!', undefined, '#38bdf8');
+        game.particles.burst(this.x, 1.2, this.z, 15, 0x38bdf8, { speed: 4, life: 0.4, size: 0.3 });
+      }
+    }
+
+    // Cooldown da Barreira de Fase
+    if (this.phaseShieldCd > 0) this.phaseShieldCd -= dt;
+
+    // Emissor de Pulso EMP: dispara a cada 9 segundos
+    if ((this.upgrades.emp_pulse ?? 0) > 0) {
+      this.empTimer -= dt;
+      if (this.empTimer <= 0) {
+        this.empTimer = 9.0;
+        for (const p of game.projectiles.pool) {
+          if (p.active && p.enemy && Math.hypot(p.x - this.x, p.z - this.z) <= 11) {
+            p.active = false;
+            game.particles.burst(p.x, p.y, p.z, 4, 0x00ffff, { speed: 3, life: 0.25, size: 0.2 });
+          }
+        }
+        for (const e of game.enemies.list) {
+          if (!e.dead && Math.hypot(e.x - this.x, e.z - this.z) <= 11) {
+            e.stun = Math.max(e.stun, 1.8);
+            game.damageEnemy(e, s.damage * 0.8, false, 'normal');
+          }
+        }
+        game.audio.explosion(1.0);
+        game.shockwaves.spawn(this.x, this.z, 0x00ffff, { endR: 11, duration: 0.45, thick: true });
+        game.particles.burst(this.x, 1.2, this.z, 30, 0x00ffff, { speed: 10, life: 0.45, size: 0.35 });
+        game.notice('PULSO EMP DISPARADO!', 'Tiros dissipados e robôs atordoados!', '#00e5ff');
       }
     }
 
@@ -595,6 +726,23 @@ export class Player {
       if (game.relics && game.relics.has('vacuum_reactor')) {
         game.projectiles.spawnMicroVortex(this.x, this.z, this.stats.damage * 1.5);
       }
+
+      // Upgrade: Propulsores de Vácuo (impulso de velocidade após o dash)
+      if ((this.upgrades.vacuum_thrusters ?? 0) > 0) {
+        this.applySpeedBuff(1.45, 2.0);
+        game.particles.burst(this.x, 1.0, this.z, 20, 0x00ffff, { speed: 8, life: 0.5, size: 0.3 });
+      }
+
+      // Upgrade: Fenda Temporal de Dash (desacelera inimigos próximos)
+      if ((this.upgrades.chronos_dash ?? 0) > 0) {
+        for (const e of game.enemies.list) {
+          if (!e.dead && Math.hypot(e.x - this.x, e.z - this.z) <= 9.0) {
+            game.enemies.applyFreeze(e, 2.5);
+          }
+        }
+        game.audio.freeze();
+        game.shockwaves.spawn(this.x, this.z, 0x9ad8ff, { endR: 9.0, duration: 0.35 });
+      }
     }
 
     // ultimate
@@ -732,6 +880,14 @@ export class Player {
     const aim = this.aimAngle;
     const color = this.hero.color;
     const evo = this.primaryEvolved;
+
+    // Upgrade: Descarga Estática (a cada 8 disparos primários, dispara arco elétrico)
+    if ((this.upgrades.static_discharge ?? 0) > 0) {
+      this.staticShotCounter = (this.staticShotCounter + 1) % 8;
+      if (this.staticShotCounter === 0) {
+        game.projectiles.fireTeslaChain(this.x, this.z, s.damage * 1.4, 3, game, false, 'static_discharge');
+      }
+    }
 
     switch (this.hero.id) {
       case 'big': {

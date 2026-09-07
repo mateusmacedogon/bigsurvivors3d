@@ -150,7 +150,7 @@ export const ENEMY_DEFS: Record<EnemyType, EnemyDef> = {
   normal:     { name: 'Drone',           hp: 22,  speed: 5.8, radius: 0.8, damage: 10, xp: 1,  color: 0xff2d75, minWave: 1,  weight: 10, coin: 0.05, desc: 'Batedores descartáveis da frota de Aura. Parecem moscas mecânicas com lasers de baixa voltagem.' },
   runner:     { name: 'Runner',          hp: 16,  speed: 9.5, radius: 0.6, damage: 8,  xp: 1,  color: 0xffa02d, minWave: 2,  weight: 7,  coin: 0.05, desc: 'Velozes e erráticos, atacam em ziguezague tentando drenar seu carisma espacial.' },
   shooter:    { name: 'Atirador',        hp: 30,  speed: 4.2, radius: 0.8, damage: 11, xp: 2,  color: 0xff5533, minWave: 3,  weight: 6,  coin: 0.08, desc: 'Dispara esferas de plasma avermelhadas em linha reta. Seu lema é atirar primeiro e mirar nunca.' },
-  tank:       { name: 'Encouraçado',     hp: 140, speed: 3.0, radius: 1.5, damage: 20, xp: 5,  color: 0x9b59ff, minWave: 4,  weight: 4,  coin: 0.2, desc: 'Tanque cibernético revestido de blindagem estelar. Lento, resistente e perigoso em bando.' },
+  tank:       { name: 'Encouraçado',     hp: 180, speed: 3.0, radius: 1.5, damage: 24, xp: 5,  color: 0x9b59ff, minWave: 4,  weight: 4,  coin: 0.2, desc: 'Tanque cibernético revestido de blindagem estelar. Lento, resistente e perigoso em bando.' },
   kamikaze:   { name: 'Kamikaze',        hp: 20,  speed: 7.8, radius: 0.6, damage: 32, xp: 2,  color: 0xff1a1a, minWave: 4,  weight: 5,  coin: 0.08, desc: 'Drone com pavio curtíssimo e carga de antimatéria no peito. Mantenha distância!' },
   shotgunner: { name: 'Espingardeiro',   hp: 40,  speed: 4.2, radius: 0.9, damage: 9,  xp: 3,  color: 0xff7a00, minWave: 5,  weight: 5,  coin: 0.1, desc: 'Dispara leques quádruplos de chumbo plasmático. Letal à queima-roupa.' },
   orbiter:    { name: 'Orbitador',       hp: 28,  speed: 8.5, radius: 0.7, damage: 15, xp: 2,  color: 0x00d0ff, minWave: 6,  weight: 5,  coin: 0.08, desc: 'Circunda a nave do jogador como um mosquito galáctico enquanto atira em espiral.' },
@@ -162,7 +162,7 @@ export const ENEMY_DEFS: Record<EnemyType, EnemyDef> = {
   beam:       { name: 'Canhão de Feixe', hp: 70,  speed: 3.4, radius: 1.1, damage: 20, xp: 4,  color: 0xff3cff, minWave: 12, weight: 3,  coin: 0.2, desc: 'Carrega um laser contínuo devastador que varre a arena. Pisca em vermelho antes de disparar.' },
   trapper:    { name: 'Armadilheiro',    hp: 46,  speed: 4.8, radius: 0.9, damage: 10, xp: 3,  color: 0x40ffe0, minWave: 13, weight: 3,  coin: 0.12, desc: 'Projeta campos gravitacionais de estase que reduzem drasticamente sua velocidade de manobra.' },
   shielder:   { name: 'Escudeiro',       hp: 52,  speed: 4.2, radius: 0.9, damage: 10, xp: 4,  color: 0x4d8dff, minWave: 14, weight: 3,  coin: 0.15, desc: 'Gera cúpulas de proteção translúcidas que absorvem todo tipo de tiro convencional.' },
-  miniboss:   { name: "Sentinela Farm'aura", hp: 1600, speed: 3.4, radius: 2.6, damage: 36, xp: 50, color: 0xffd700, minWave: 5, weight: 0, coin: 4, desc: 'Sentinela de ouro e antimatéria. Dispara ondas de choque concêntricas e chuvas de estilhaços.' },
+  miniboss:   { name: "Sentinela Farm'aura", hp: 3600, speed: 3.4, radius: 2.6, damage: 38, xp: 60, color: 0xffd700, minWave: 5, weight: 0, coin: 5, desc: 'Sentinela de ouro e antimatéria com blindagem reforçada e escudos regenerativos.' },
   mine:       { name: 'Mina',            hp: 1,   speed: 0,   radius: 0.6, damage: 24, xp: 0,  color: 0xffe02d, minWave: 99, weight: 0,  coin: 0, desc: 'Mina estática de proximidade altamente sensível.' },
 };
 
@@ -204,6 +204,33 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'xpgain', name: 'Sabedoria Cósmica', icon: '✧', base: 12, max: 4, unit: 'pct', desc: v => `+${v}% de XP obtido` },
   { id: 'explosive', name: 'Munição Explosiva', icon: '✺', base: 10, max: 4, unit: 'pct', desc: v => `+${v}% de chance de explosão ao acertar` },
   { id: 'knockback', name: 'Impacto', icon: '⇉', base: 30, max: 3, unit: 'pct', desc: v => `+${v}% de repulsão nos ataques` },
+
+  // --- Novos Power-Ups: Defensivos & Sobrevivência ---
+  { id: 'deflection_field', name: 'Campo de Deflexão Cinética', icon: '🛡', base: 12, max: 3, unit: 'pct', desc: v => `+${v}% de chance de defletir tiros e ataques inimigos` },
+  { id: 'repair_nanites', name: 'Nanitas Reparadores', icon: '🩹', base: 1, max: 1, unit: 'count', desc: () => 'Após 4s sem sofrer dano, regenera +3.5 HP por segundo gradualmente' },
+  { id: 'reactive_thorns', name: 'Casco Reativo de Espinhos', icon: '🌵', base: 1, max: 1, unit: 'count', desc: () => 'Ao sofrer dano, dispara 8 espinhos de plasma em 360° com dano e repulsão' },
+  { id: 'ablative_armor', name: 'Blindagem Ablativa', icon: '🔰', base: 1, max: 1, unit: 'count', desc: () => 'A cada 12s, gera uma placa que anula completamente o próximo dano sofrido' },
+  { id: 'phase_shield', name: 'Barreira de Fase de Emergência', icon: '🌌', base: 1, max: 1, unit: 'count', desc: () => 'Ao receber dano, ganha 1.2s de invulnerabilidade e +35% de velocidade' },
+  { id: 'siphon_plating', name: 'Blindagem Sifônica', icon: '🩸', base: 1, max: 1, unit: 'count', desc: () => 'Abater inimigos enquanto estiver abaixo de 35% de HP restaura 2.5 HP' },
+
+  // --- Novos Power-Ups: Utilitários & Movimento ---
+  { id: 'vacuum_thrusters', name: 'Propulsores de Vácuo', icon: '🚀', base: 1, max: 1, unit: 'count', desc: () => 'O Dash concede um impulso de +45% de velocidade de movimento por 2 segundos' },
+  { id: 'anomaly_detector', name: 'Detector de Anomalias', icon: '📡', base: 1, max: 1, unit: 'count', desc: () => '+40% de alcance magnético e +50% de chance de drops raros e baús' },
+  { id: 'overcharge_battery', name: 'Bateria de Sobrecarga', icon: '🔋', base: 1, max: 1, unit: 'count', desc: () => 'Orbes de XP aceleram diretamente a recarga da Habilidade Suprema' },
+  { id: 'gravitational_converter', name: 'Conversor Gravitacional', icon: '🌀', base: 1, max: 1, unit: 'count', desc: () => 'Coletar XP com vida cheia converte o excesso em escudo protetor azul (até 45)' },
+  { id: 'scrap_synthesizer', name: 'Sintetizador de Sucata', icon: '♻', base: 1, max: 1, unit: 'count', desc: () => 'A cada 25 inimigos abatidos, sintetiza um item de cura ou suprimento' },
+  { id: 'chronos_dash', name: 'Fenda Temporal de Dash', icon: '⏳', base: 1, max: 1, unit: 'count', desc: () => 'O Dash desacelera em 60% todos os inimigos próximos por 2.5 segundos' },
+
+  // --- Novos Power-Ups: Ofensivos Táticos & Efeitos de Status ---
+  { id: 'cryo_rounds', name: 'Balas Criogênicas', icon: '❄', base: 1, max: 1, unit: 'count', desc: () => 'Todos os disparos aplicam lentidão e congelamento acumulativo aos alvos' },
+  { id: 'static_discharge', name: 'Descarga Estática', icon: '⚡', base: 1, max: 1, unit: 'count', desc: () => 'A cada 8 disparos da arma primária, emite arcos elétricos em alvos vizinhos' },
+  { id: 'fragmentation_rounds', name: 'Projéteis Fragmentários', icon: '💥', base: 1, max: 1, unit: 'count', desc: () => 'Projéteis que acertam o alvo se dividem em 2 estilhaços secundários perfurantes', exclude: ['otton', 'carlinhos'] },
+  { id: 'photon_overload', name: 'Sobrecarga de Fótons', icon: '🔆', base: 1, max: 1, unit: 'count', desc: () => 'Acertos consecutivos no mesmo alvo aumentam o dano em até +40%' },
+  { id: 'antimatter_rounds', name: 'Projéteis de Antimatéria', icon: '⚛', base: 1, max: 1, unit: 'count', desc: () => 'Tiros quebram escudos 60% mais rápido e ignoram 50% da armadura inimiga' },
+  { id: 'emp_pulse', name: 'Emissor de Pulso EMP', icon: '💫', base: 1, max: 1, unit: 'count', desc: () => 'A cada 9 segundos, emite pulso eletromagnético que anula tiros e atordoa robôs' },
+  { id: 'combustion_core', name: 'Núcleo de Combustão', icon: '🔥', base: 1, max: 1, unit: 'count', desc: () => 'Inimigos incendiados explodem em chamas ao serem derrotados' },
+  { id: 'executioner', name: 'Protocolo Algoz', icon: '☠', base: 1, max: 1, unit: 'count', desc: () => '+40% de dano devastador contra inimigos com menos de 35% de vida' },
+  { id: 'supercharge_laser', name: 'Foco Balístico Hiperdenso', icon: '🎯', base: 1, max: 1, unit: 'count', desc: () => '+20% de área e velocidade balística e +1 de perfuração adicional', exclude: ['otton', 'carlinhos'] },
 
   // Armas Secundárias (Armas Ativas) - Desbloqueio Único (max: 1)
   { id: 'weapon_missile', name: 'Pod de Micro-Mísseis', icon: '🚀', base: 1, max: 1, unit: 'count', desc: () => 'Instala lançador de micro-mísseis teleguiados de alta precisão' },
@@ -832,17 +859,23 @@ export function xpForLevel(level: number): number {
 
 export function enemyHpMul(wave: number): number {
   const w = Math.max(0, wave - 1);
-  return 1 + w * 0.28 + Math.pow(w, 1.85) * 0.035;
+  if (w <= 4) {
+    // Ondas 1-5: Início acessível e dinâmico
+    return 1 + w * 0.28 + Math.pow(w, 1.7) * 0.03;
+  }
+  // Ondas 6-20: Escalonamento log-linear progressivo para sustentar o late-game do jogador
+  const lateBonus = Math.max(0, w - 4);
+  return 1 + w * 0.35 + Math.pow(w, 1.75) * 0.04 + Math.pow(lateBonus, 2.1) * 0.12;
 }
 
 export function enemyDmgMul(wave: number): number {
   const w = Math.max(0, wave - 1);
-  return 1 + w * 0.10 + Math.pow(w, 1.4) * 0.03;
+  return 1 + w * 0.09 + Math.pow(w, 1.35) * 0.025;
 }
 
 export function enemySpeedMul(wave: number): number {
   const w = Math.max(0, wave - 1);
-  return 1 + Math.min(0.65, w * 0.03);
+  return 1 + Math.min(0.50, w * 0.025);
 }
 
 export const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));

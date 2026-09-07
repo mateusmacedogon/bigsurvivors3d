@@ -40,6 +40,8 @@ export interface Enemy {
   lastHit: number;
   life: number;
   spin: number;
+  consecutiveHits?: number;
+  consecutiveHitTimer?: number;
 }
 
 interface Rift { x: number; z: number; t: number; type: EnemyType; tele: Telegraph }
@@ -639,16 +641,68 @@ export class EnemyManager {
 
   damage(e: Enemy, amount: number, game: Game, crit = false, kind: 'normal' | 'corrode' | 'love' = 'normal'): boolean {
     if (e.dead) return false;
-    if (e.curse > 0) amount *= (e.curseMult ?? 1.25);
-    if (e.type === 'tank') amount = Math.max(1, amount - 3 * (e.elite ? 2 : 1) * enemyDmgMul(game.wave));
-    if (e.type === 'miniboss') amount *= 0.85;
-    if (e.shield > 0) {
-      const abs = Math.min(e.shield, amount);
-      e.shield -= abs;
-      amount -= abs;
-      game.particles.burst(e.x, e.y + 0.5, e.z, 5, 0x4d8dff, { speed: 5, life: 0.35, size: 0.25, gravity: 0 });
-      if (amount <= 0) { e.flash = 0.6; return false; }
+
+    // Sobrecarga de Fótons: acertos consecutivos aumentam dano até +40%
+    if ((game.player.upgrades.photon_overload ?? 0) > 0) {
+      e.consecutiveHits = Math.min(5, (e.consecutiveHits ?? 0) + 1);
+      e.consecutiveHitTimer = 2.0;
+      amount *= (1 + e.consecutiveHits * 0.08);
     }
+
+    // Protocolo Algoz: +40% de dano contra monstros com menos de 35% HP
+    if ((game.player.upgrades.executioner ?? 0) > 0 && (e.hp / e.maxHp) < 0.35) {
+      amount *= 1.40;
+    }
+
+    if (e.curse > 0) amount *= (e.curseMult ?? 1.25);
+
+    // Resistência progressiva a dano por onda (ondas 6-20)
+    const wave = game.wave;
+    const waveResist = wave >= 6 ? Math.min(0.35, (wave - 5) * 0.025) : 0;
+    amount *= (1 - waveResist);
+
+    const antimatter = (game.player.upgrades.antimatter_rounds ?? 0) > 0;
+    const armorPen = antimatter ? 0.5 : 1.0;
+
+    // Blindagem de Encouraçado (Tank)
+    if (e.type === 'tank') {
+      const tankArmor = (4 + wave * 0.8) * (e.elite ? 2.2 : 1.0) * armorPen;
+      amount = Math.max(1, (amount - tankArmor) * (kind === 'corrode' ? 1.0 : 0.82));
+    }
+
+    // Sentinela Farm'aura (Mini-Boss): 35% de resistência e limitador de pico de dano
+    if (e.type === 'miniboss') {
+      amount *= 0.65;
+      const maxSingleHit = e.maxHp * 0.06;
+      if (amount > maxSingleHit) {
+        amount = maxSingleHit + (amount - maxSingleHit) * 0.25;
+      }
+    }
+
+    // Inimigos de Elite: 20% de resistência inata
+    if (e.elite) {
+      amount *= 0.80;
+    }
+
+    // Compressão anti-insta-kill para hordas normais contra danos astronômicos
+    if (e.type !== 'mine' && e.type !== 'kamikaze' && e.type !== 'miniboss' && !e.elite) {
+      const threshold = e.maxHp * 0.70;
+      if (amount > threshold) {
+        amount = threshold + (amount - threshold) * 0.45;
+      }
+    }
+
+    // Absorção de Escudo com interação de Projéteis de Antimatéria (+60% quebra de escudo)
+    if (e.shield > 0) {
+      const shieldMult = antimatter ? 1.6 : 1.0;
+      const shieldDmg = amount * shieldMult;
+      const abs = Math.min(e.shield, shieldDmg);
+      e.shield -= abs;
+      amount = Math.max(0, amount - (abs / shieldMult));
+      game.particles.burst(e.x, e.y + 0.5, e.z, 6, 0x4d8dff, { speed: 5, life: 0.35, size: 0.25, gravity: 0 });
+      if (amount <= 0) { e.flash = 0.6; e.lastHit = 0; return false; }
+    }
+
     e.hp -= amount;
     e.flash = 1;
     e.lastHit = 0;
@@ -712,6 +766,10 @@ export class EnemyManager {
         color: 0x8cff2a,
         source: 'ferocious_horde',
       });
+    }
+    // Upgrade: Núcleo de Combustão (inimigos incendiados explodem em chamas ao morrer)
+    if (game.player && (game.player.upgrades.combustion_core ?? 0) > 0 && (e.burn > 0 || e.burnColor === 0x8cff2a || e.burnDps > 0)) {
+      game.explodePlayer(e.x, e.z, 4.0 * game.player.stats.area, game.player.stats.damage * 1.4, 0xff5500, 10, false, 'combustion_core');
     }
     game.onEnemyKilled(e);
   }
@@ -825,7 +883,13 @@ export class EnemyManager {
       }
       if (e.frozen > 0) e.frozen -= dt;
       if (e.stun > 0) e.stun -= dt;
-      if (e.elite && e.lastHit > 3 && e.shield < e.maxShield) e.shield = Math.min(e.maxShield, e.shield + e.maxShield * 0.12 * dt);
+      if (e.consecutiveHitTimer && e.consecutiveHitTimer > 0) {
+        e.consecutiveHitTimer -= dt;
+        if (e.consecutiveHitTimer <= 0) e.consecutiveHits = 0;
+      }
+      if ((e.elite || e.type === 'miniboss') && e.lastHit > 3.5 && e.shield < e.maxShield) {
+        e.shield = Math.min(e.maxShield, e.shield + e.maxShield * 0.16 * dt);
+      }
 
       // elite modifiers
       if (e.elite && e.eliteMod) {
