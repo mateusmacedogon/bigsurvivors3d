@@ -8,7 +8,7 @@ import {
   resetAllSaveData,
   type MetaSave,
 } from '../game/save';
-import type { Snapshot } from '../game/config';
+import { PACTS, type Snapshot, type PactId } from '../game/config';
 
 interface ModMenuProps {
   isOpen: boolean;
@@ -429,6 +429,145 @@ export function ModMenu({ isOpen, onClose, game, meta, onMetaUpdate, snap }: Mod
                   >
                     <div className="font-display font-bold text-xs text-red-300">💥 Nuke Total</div>
                     <div className="text-[10px] text-white/40 mt-0.5">Elimina todos na tela</div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Modos de Jogo & Pactos Cósmicos */}
+              <div className="p-3.5 glass rounded-xl border border-purple-400/30 space-y-2.5">
+                <div className="text-xs uppercase tracking-widest text-purple-300 font-bold">🌌 Modos de Jogo & Pactos Cósmicos</div>
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase text-white/50 font-semibold">Modo de Jogo:</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      onClick={() => {
+                        if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                        game.setGameModeCheat('classic');
+                        showToast('🚀 Modo Clássico ativado!');
+                      }}
+                      className="p-2 rounded-lg glass border border-white/20 hover:border-cyan-400 text-left text-xs cursor-pointer"
+                    >
+                      <div className="font-bold text-cyan-300">🚀 Clássico</div>
+                      <div className="text-[10px] text-white/50">Padrão da arena</div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                        game.setGameModeCheat('hyper');
+                        showToast('⚡ Modo Hiper ativado (+25% velocidade, +50% XP/Shards)!');
+                      }}
+                      className="p-2 rounded-lg glass border border-amber-500/30 hover:border-amber-400 text-left text-xs cursor-pointer"
+                    >
+                      <div className="font-bold text-amber-300">⚡ Hiper</div>
+                      <div className="text-[10px] text-white/50">+25% Vel, +50% XP</div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                        game.setGameModeCheat('boss_rush');
+                        showToast('👾 Modo Boss Rush ativado!');
+                      }}
+                      className="p-2 rounded-lg glass border border-red-500/30 hover:border-red-400 text-left text-xs cursor-pointer"
+                    >
+                      <div className="font-bold text-red-300">👾 Boss Rush</div>
+                      <div className="text-[10px] text-white/50">Só chefes & minibosses</div>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1 pt-1">
+                  <div className="text-[10px] uppercase text-white/50 font-semibold">Alternar Pactos Cósmicos:</div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {(Object.entries(PACTS) as [PactId, typeof PACTS[PactId]][]).map(([pactId, pactDef]) => (
+                      <button
+                        key={pactId}
+                        onClick={() => {
+                          if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                          game.togglePactCheat(pactId);
+                          const active = game.pacts.includes(pactId);
+                          showToast(`${pactDef.icon} ${pactDef.name}: ${active ? 'ATIVADO' : 'DESATIVADO'}`);
+                        }}
+                        className="p-2 rounded-lg glass border border-purple-500/30 hover:border-purple-400 text-left text-xs cursor-pointer"
+                      >
+                        <div className="font-bold text-purple-200">{pactDef.icon} {pactDef.name}</div>
+                        <div className="text-[10px] text-fuchsia-300">+{Math.round(pactDef.shardBonus * 100)}% Shards</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Eventos de Arena & Relíquias */}
+              <div className="p-3.5 glass rounded-xl border border-cyan-400/30 space-y-2.5">
+                <div className="text-xs uppercase tracking-widest text-cyan-300 font-bold">🌌 Eventos de Arena & Relíquias Cósmicas</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <button
+                    onClick={() => {
+                      if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                      game.triggerArenaEventCheat('meteor_shower');
+                      showToast('☄️ Chuva de Meteoros de Éter disparada!');
+                    }}
+                    className="p-2 rounded-lg glass border border-red-500/30 hover:border-red-400 text-left text-xs cursor-pointer"
+                  >
+                    <div className="font-bold text-red-300">☄️ Meteoros</div>
+                    <div className="text-[10px] text-white/50">Chuva cósmica</div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                      game.triggerArenaEventCheat('shard_thief');
+                      showToast('👾 Ladrão de Shards convocado!');
+                    }}
+                    className="p-2 rounded-lg glass border border-amber-500/30 hover:border-amber-400 text-left text-xs cursor-pointer"
+                  >
+                    <div className="font-bold text-amber-300">👾 Ladrão</div>
+                    <div className="text-[10px] text-white/50">Baú cósmico</div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                      game.triggerArenaEventCheat('quantum_overload');
+                      showToast('⚡ Sobrecarga Quântica posicionada!');
+                    }}
+                    className="p-2 rounded-lg glass border border-cyan-500/30 hover:border-cyan-400 text-left text-xs cursor-pointer"
+                  >
+                    <div className="font-bold text-cyan-300">⚡ Domo Quântico</div>
+                    <div className="text-[10px] text-white/50">Hiper-cadência</div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                      game.triggerArenaEventCheat('gravity_storm');
+                      showToast('🌀 Tempestade Gravitacional iniciada!');
+                    }}
+                    className="p-2 rounded-lg glass border border-purple-500/30 hover:border-purple-400 text-left text-xs cursor-pointer"
+                  >
+                    <div className="font-bold text-purple-300">🌀 Gravidade</div>
+                    <div className="text-[10px] text-white/50">Repulsão 3x</div>
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={() => {
+                      if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                      game.grantAllRelicsCheat();
+                      showToast('💎 Todas as 7 Relíquias ativadas!');
+                    }}
+                    className="p-2.5 rounded-lg glass border border-amber-400/40 bg-amber-500/10 text-left text-xs cursor-pointer hover:border-amber-400"
+                  >
+                    <div className="font-bold text-amber-200">💎 Ativar Todas as 7 Relíquias</div>
+                    <div className="text-[10px] text-white/50">Nanites, Chronos, Fênix, Tesla, etc.</div>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!game || !inRun) { showToast('⚠️ Inicie uma partida primeiro.'); return; }
+                      game.triggerAscensionCheat();
+                      onClose();
+                    }}
+                    className="p-2.5 rounded-lg glass border border-amber-400/40 bg-amber-500/10 text-left text-xs cursor-pointer hover:border-amber-400"
+                  >
+                    <div className="font-bold text-amber-200">⭐ Abrir Ascensão Nv. 10</div>
+                    <div className="text-[10px] text-white/50">Escolha os 2 perks do herói</div>
                   </button>
                 </div>
               </div>

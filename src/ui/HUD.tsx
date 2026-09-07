@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { Snapshot } from '../game/config';
 import { heroById } from '../game/config';
 import type { Game } from '../game/game';
+import { RELIC_DEFS } from '../game/relics';
 
 const fmtTime = (t: number) => {
   const m = Math.floor(t / 60), s = Math.floor(t % 60);
@@ -203,6 +204,41 @@ export function HUD({ snap, game }: { snap: Snapshot; game: Game }) {
             </div>
           </div>
         )}
+
+        {/* Relíquias Cósmicas Ativas */}
+        {snap.relics && snap.relics.length > 0 && (
+          <div className="flex gap-1.5 justify-center flex-wrap mt-0.5">
+            {snap.relics.map(rId => {
+              const r = RELIC_DEFS[rId as keyof typeof RELIC_DEFS];
+              return (
+                <div
+                  key={rId}
+                  className="px-2 py-0.5 rounded-lg glass border border-amber-400/50 flex items-center gap-1 shadow-[0_0_10px_rgba(245,158,11,0.25)] text-xs transition-all hover:scale-110"
+                  title={`${r?.name}: ${r?.desc}`}
+                >
+                  <span className="text-sm">{r?.icon}</span>
+                  <span className="font-display font-bold text-[10px] text-amber-200">{r?.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Banner do Evento de Arena Ativo */}
+        {snap.activeArenaEvent && (
+          <div
+            className="glass-strong border rounded-xl px-4 py-1.5 flex items-center gap-2.5 shadow-[0_0_20px_rgba(0,229,255,0.35)] animate-pulse mt-0.5"
+            style={{ borderColor: snap.activeArenaEvent.color }}
+          >
+            <span className="text-xl">{snap.activeArenaEvent.icon}</span>
+            <div className="flex flex-col text-left">
+              <span className="font-display font-black text-xs tracking-wider" style={{ color: snap.activeArenaEvent.color }}>
+                {snap.activeArenaEvent.name.toUpperCase()} · {snap.activeArenaEvent.timer}s
+              </span>
+              <span className="text-[10px] text-white/80">{snap.activeArenaEvent.desc}</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* topo direita: recursos */}
@@ -296,6 +332,39 @@ export function HUD({ snap, game }: { snap: Snapshot; game: Game }) {
       {snap.time < 14 && (
         <div className="absolute bottom-7 left-1/2 -translate-x-1/2 glass rounded-full px-5 py-2 text-xs tracking-[0.2em] uppercase text-white/70 fade-in">
           WASD mover · Mouse mirar · Espaço dash · Q suprema · P pausar
+        </div>
+      )}
+
+      {/* Alertas Direcionais de Ameaças Fora da Tela (Bosses & Mini-bosses) */}
+      {snap.offscreenThreats && snap.offscreenThreats.length > 0 && (
+        <div className="pointer-events-none fixed inset-0 overflow-hidden z-30">
+          {snap.offscreenThreats.map((threat, idx) => (
+            <div
+              key={idx}
+              className="absolute transition-all duration-75"
+              style={{
+                left: `calc(50% + ${Math.sin(threat.angle) * 42}vw)`,
+                top: `calc(50% - ${Math.cos(threat.angle) * 42}vh)`,
+                transform: 'translate(-50%, -50%)',
+              }}
+            >
+              <div
+                className={`px-2.5 py-1 rounded-lg glass font-display font-bold text-xs flex items-center gap-1.5 border animate-pulse shadow-lg ${
+                  threat.isBoss
+                    ? 'border-red-500 bg-red-600/30 text-red-200 shadow-[0_0_15px_rgba(239,68,68,0.5)]'
+                    : 'border-amber-400 bg-amber-500/25 text-amber-200 shadow-[0_0_12px_rgba(245,158,11,0.4)]'
+                }`}
+              >
+                <span
+                  className="inline-block text-xs font-bold"
+                  style={{ transform: `rotate(${(threat.angle * 180) / Math.PI}deg)` }}
+                >
+                  ▲
+                </span>
+                <span>{threat.name} ({threat.distance}m)</span>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

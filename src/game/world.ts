@@ -101,14 +101,24 @@ export class World {
     scene.add(wall);
 
     // Luzes
-    const hemi = new THREE.HemisphereLight(0x5070ff, 0x200a30, 1.2);
-    scene.add(hemi);
-    const dir = new THREE.DirectionalLight(0xffffff, 1.6);
-    dir.position.set(20, 50, 10);
-    scene.add(dir);
-    const fill = new THREE.DirectionalLight(0xff40a0, 0.5);
-    fill.position.set(-30, 20, -20);
-    scene.add(fill);
+    this.hemi = new THREE.HemisphereLight(0x5070ff, 0x200a30, 0.85);
+    scene.add(this.hemi);
+    this.dir = new THREE.DirectionalLight(0xffffff, 1.10);
+    this.dir.position.set(20, 50, 10);
+    scene.add(this.dir);
+    this.fill = new THREE.DirectionalLight(0xff40a0, 0.32);
+    this.fill.position.set(-30, 20, -20);
+    scene.add(this.fill);
+  }
+
+  hemi: THREE.HemisphereLight;
+  dir: THREE.DirectionalLight;
+  fill: THREE.DirectionalLight;
+
+  setPenumbraMode(enabled: boolean) {
+    this.hemi.intensity = enabled ? 0.08 : 0.85;
+    this.dir.intensity = enabled ? 0.08 : 1.10;
+    this.fill.intensity = enabled ? 0.04 : 0.32;
   }
 
   setTheme(color: number) {

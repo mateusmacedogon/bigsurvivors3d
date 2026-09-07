@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Game } from './game/game';
-import type { HeroId, MetaId, Snapshot } from './game/config';
+import type { HeroId, MetaId, Snapshot, GameMode, PactId } from './game/config';
 import { buyMeta, getMetaBonuses, loadMeta, type MetaSave } from './game/save';
 import { HUD } from './ui/HUD';
-import { EndScreen, Hangar, HeroSelect, LevelUpScreen, MainMenu, PauseScreen, AchievementsScreen, CodexScreen, SettingsModal } from './ui/Screens';
+import { EndScreen, Hangar, HeroSelect, LevelUpScreen, MainMenu, PauseScreen, AchievementsScreen, CodexScreen, SettingsModal, AscensionModal } from './ui/Screens';
 import { ModMenu } from './ui/ModMenu';
 
 type MenuScreen = 'main' | 'heroes' | 'hangar' | 'achievements' | 'codex';
@@ -70,11 +70,11 @@ export default function App() {
 
   const game = gameRef.current;
 
-  const startRun = useCallback((hero: HeroId) => {
+  const startRun = useCallback((hero: HeroId, mode?: GameMode, pacts?: PactId[]) => {
     const g = gameRef.current;
     if (!g) return;
     g.audio.ui();
-    g.start(hero);
+    g.start(hero, mode ?? 'classic', pacts ?? []);
     setSnap(g.getSnapshot());
   }, []);
 
@@ -138,6 +138,12 @@ export default function App() {
             />
           )}
           {phase === 'levelup' && <LevelUpScreen choices={snap.choices} level={snap.level} onPick={id => game.chooseUpgrade(id)} />}
+          {phase === 'ascension' && snap.ascensionChoice && (
+            <AscensionModal
+              choices={snap.ascensionChoice}
+              onPick={id => game.chooseAscension(id)}
+            />
+          )}
           {(phase === 'gameover' || phase === 'victory') && snap.result && (
             <EndScreen result={snap.result} onMenu={toMenu} onContinue={phase === 'victory' ? () => game.continueEndless() : undefined} />
           )}

@@ -243,6 +243,18 @@ export class GroundHazardSystem {
     this.hazards = [];
   }
 
+  isInHazard(x: number, z: number, type: GroundHazardType): boolean {
+    for (const h of this.hazards) {
+      if (h.type === type && h.life > 0) {
+        const dx = h.x - x, dz = h.z - z;
+        if (dx * dx + dz * dz <= h.radius * h.radius) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   dispose() {
     this.clear();
     this.circleGeo.dispose();

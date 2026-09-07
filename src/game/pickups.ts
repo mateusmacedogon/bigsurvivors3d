@@ -48,8 +48,21 @@ export class PickupSystem {
     for (let i = 0; i < this.max; i++) {
       this.pool.push({ active: false, kind: 'xp', x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, value: 1, rot: 0, magnet: false, speed: 0, life: 0, phase: 0 });
     }
-    const mk = (geo: THREE.BufferGeometry, count: number, color: number, emissiveMult = 1) => {
-      const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: color, emissiveIntensity: emissiveMult, metalness: 0.4, roughness: 0.2 });
+    const mk = (geo: THREE.BufferGeometry, count: number, emissiveMult = 1, metalness = 0.5, roughness = 0.2) => {
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0.4, 0.4, 0.4),
+        emissive: new THREE.Color(0xffffff),
+        emissiveIntensity: emissiveMult * 0.35,
+        metalness,
+        roughness,
+      });
+      mat.customProgramCacheKey = () => 'pickup_standard';
+      mat.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+          '#include <emissivemap_fragment>',
+          '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vColor.rgb;'
+        );
+      };
       const m = new THREE.InstancedMesh(geo, mat, count);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
       m.count = 0;
@@ -116,11 +129,11 @@ export class PickupSystem {
     ]);
 
     this.meshes = {
-      xp: mk(xpGeo, this.caps.xp, 0x00e5ff, 1.6),
-      coin: mk(coinGeo, this.caps.coin, 0xffb020, 1.4),
-      shard: mk(shardGeo, this.caps.shard, 0xff3cf0, 2.0),
-      heal: mk(healGeo, this.caps.heal, 0x33ff88, 1.6),
-      magnet: mk(magnetGeo, this.caps.magnet, 0xffffff, 1.5),
+      xp: mk(xpGeo, this.caps.xp, 1.4, 0.45, 0.18),
+      coin: mk(coinGeo, this.caps.coin, 1.2, 0.8, 0.22),
+      shard: mk(shardGeo, this.caps.shard, 1.6, 0.4, 0.15),
+      heal: mk(healGeo, this.caps.heal, 1.3, 0.35, 0.22),
+      magnet: mk(magnetGeo, this.caps.magnet, 1.2, 0.7, 0.2),
     };
   }
 
@@ -231,9 +244,9 @@ export class PickupSystem {
       } else if (p.kind === 'coin') tmpColor.setHex(0xffc040);
       else if (p.kind === 'shard') tmpColor.setHex(0xff60ff);
       else if (p.kind === 'heal') tmpColor.setHex(0x40ff90);
-      else tmpColor.setHex(0xffffff);
-      const k = 1.6 * blink;
-      mesh.instanceColor!.setXYZ(i, clamp(tmpColor.r * k, 0, 4), clamp(tmpColor.g * k, 0, 4), clamp(tmpColor.b * k, 0, 4));
+      else tmpColor.setHex(0xa0e0ff);
+      const k = 1.05 * blink;
+      mesh.instanceColor!.setXYZ(i, clamp(tmpColor.r * k, 0, 2.5), clamp(tmpColor.g * k, 0, 2.5), clamp(tmpColor.b * k, 0, 2.5));
       counts[p.kind]++;
     }
     for (const k of KINDS) {

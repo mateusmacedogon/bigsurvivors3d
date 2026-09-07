@@ -79,10 +79,14 @@ export const UPGRADE_TO_SECONDARY: Record<string, SecondaryWeaponId> = {
   weapon_saw: 'orbital_saw',
   weapon_tesla: 'tesla_coil',
   weapon_gravity: 'gravity_well',
+  weapon_flamethrower: 'flamethrower',
+  weapon_railgun: 'railgun',
   missile_pod: 'missile_pod',
   orbital_saw: 'orbital_saw',
   tesla_coil: 'tesla_coil',
   gravity_well: 'gravity_well',
+  flamethrower: 'flamethrower',
+  railgun: 'railgun',
 };
 
 const query: Enemy[] = [];
@@ -106,6 +110,11 @@ export class Player {
   dashFlameTick = 0;
   dashCount = 0;
   lifestealTimer = 0;
+  ascensionPerk: string | null = null;
+  hyperModeMult = 1.0;
+  noDampeners = false;
+  celestialShield = 0;
+  bigAfterburnerTick = 0;
   private dashKineticHits = new Set<number>();
   dashCd = 0; dashMax = 1.5; dashTimer = 0; private dashDirX = 0; private dashDirZ = 1; private ghostTimer = 0;
   godMode = false;
@@ -181,7 +190,7 @@ export class Player {
     this.shield.visible = false;
     this.shield.renderOrder = 15;
     scene.add(this.shield);
-    this.light = new THREE.PointLight(hero.color, 18, 16, 1.8);
+    this.light = new THREE.PointLight(hero.color, 8, 14, 1.8);
     this.light.position.y = 2.5;
     this.group.add(this.light);
     this.ghosts = new GhostPool(scene);
@@ -219,13 +228,16 @@ export class Player {
     const furyBonus = furyActive ? furyLvl * 0.20 : 0;
     const rapidSiloReduc = h.id === 'big' ? (u.hero_big_rapid_silo ?? 0) * 0.20 : 0;
     const ottonBleedKnock = h.id === 'otton' && (u.hero_otton_bleeding_strike ?? 0) > 0 ? 1.4 : 1;
+    const bigSpeedAsc = this.ascensionPerk === 'big_lightning_interceptor' ? 1.30 : 1.0;
+    const ottonHpAsc = this.ascensionPerk === 'otton_armored_colossus' ? 120 : 0;
+    const ottonArmorAsc = this.ascensionPerk === 'otton_armored_colossus' ? 2.0 : 1.0;
     return {
-      maxHp: h.hp + m.hp + (u.maxhp ?? 0),
-      speed: h.speed * (1 + m.speed + pct('speed')) * this.speedBuffMult * (1 + trapBonus * 0.04) * (1 + furyBonus),
+      maxHp: h.hp + m.hp + (u.maxhp ?? 0) + ottonHpAsc,
+      speed: h.speed * (1 + m.speed + pct('speed')) * this.speedBuffMult * (1 + trapBonus * 0.04) * (1 + furyBonus) * this.hyperModeMult * bigSpeedAsc,
       damage: h.damage * (1 + m.dmg + pct('damage')) * (1 + trapBonus * 0.04),
       fireRate: (1 + pct('firerate')) * (1 + furyBonus),
       magnet: 5.5 * (1 + m.magnet + pct('magnet')),
-      armor: m.armor + (u.armor ?? 0),
+      armor: (m.armor + (u.armor ?? 0)) * ottonArmorAsc,
       xpMult: 1 + m.xp + pct('xpgain'),
       ultCd: Math.max(0.3, 1 - m.ultcd - pct('ultcd') - rapidSiloReduc),
       luck: m.luck,
@@ -243,6 +255,17 @@ export class Player {
       explosive: pct('explosive'),
       knockback: (1 + pct('knockback')) * ottonBleedKnock,
     };
+  }
+
+  applyAscensionPerk(perkId: string, game: Game) {
+    this.ascensionPerk = perkId;
+    if (perkId === 'otton_armored_colossus') {
+      this.hp += 120;
+    }
+    this.stats = this.computeStats();
+    game.audio.ascension();
+    game.particles.burst(this.x, 1.5, this.z, 50, 0xffd700, { speed: 12, life: 0.8, size: 0.45 });
+    game.shockwaves.spawn(this.x, this.z, 0xffd700, { endR: 8, duration: 0.5, thick: true });
   }
 
   applyUpgrade(id: string, value: number) {
@@ -328,7 +351,7 @@ export class Player {
     this.hp = Math.min(this.stats.maxHp, this.hp + amount);
   }
 
-  takeDamage(amount: number, sx: number, sz: number): number {
+  takeDamage(amount: number, sx: number, sz: number, game?: Game): number {
     if (this.invulnerable) return 0;
     const maxReduction = amount * 0.60;
     const reduction = Math.min(this.stats.armor, maxReduction);
@@ -337,6 +360,23 @@ export class Player {
       const furyLvl = this.upgrades.hero_otton_gladiator_armor ?? 1;
       amount *= Math.max(0.45, 1 - furyLvl * 0.15);
     }
+    // Absorção pelo escudo de compaixão celestial
+    if (this.celestialShield > 0) {
+      const absorbed = Math.min(this.celestialShield, amount);
+      this.celestialShield -= absorbed;
+      amount -= absorbed;
+      if (amount <= 0) return 0;
+    }
+    // Reflexão do Colosso Blindado
+    if (this.ascensionPerk === 'otton_armored_colossus' && game) {
+      const reflectDmg = amount * 0.4;
+      for (const e of game.enemies.list) {
+        if (!e.dead && Math.hypot(e.x - this.x, e.z - this.z) <= 6.5) {
+          game.damageEnemy(e, reflectDmg, false, 'normal');
+        }
+      }
+      game.shockwaves.spawn(this.x, this.z, 0xff4a2a, { endR: 6.5, duration: 0.35 });
+    }
     this.hp -= amount;
     this.invulnTimer = 0.45;
     const dx = sx - this.x, dz = sz - this.z;
@@ -344,7 +384,30 @@ export class Player {
     (this.shieldMat.uniforms.uImpact.value as THREE.Vector3).set(dx / d, 0.2, dz / d);
     this.impactAge = 0;
     this.shieldOpacity = 1;
-    if (this.hp <= 0) { this.hp = 0; this.alive = false; }
+
+    // Checagem de Protocolo Fênix antes da destruição
+    if (this.hp <= 0) {
+      if (game && game.relics && game.relics.canTriggerPhoenix()) {
+        game.relics.triggerPhoenix();
+        this.hp = Math.round(this.stats.maxHp * 0.4);
+        this.invulnTimer = 3.5;
+        this.alive = true;
+        game.audio.explosion(3);
+        game.audio.victory();
+        game.vfx.explosion(this.x, 1.0, this.z, 0xff7700, 14, 1.8);
+        game.shockwaves.spawn(this.x, this.z, 0xff4500, { endR: 18, duration: 0.8, thick: true });
+        game.particles.burst(this.x, 1.0, this.z, 80, 0xffaa00, { speed: 18, life: 1.0, size: 0.5 });
+        for (const e of game.enemies.list) {
+          if (!e.dead && Math.hypot(e.x - this.x, e.z - this.z) <= 18) {
+            game.damageEnemy(e, 350 + game.wave * 35, true, 'normal');
+          }
+        }
+        game.notice('PROTOCOLO FÊNIX ATIVADO!', 'Supernova de emergência detonada! 40% HP restaurado!', '#f97316');
+        return amount;
+      }
+      this.hp = 0;
+      this.alive = false;
+    }
     return amount;
   }
 
@@ -438,7 +501,7 @@ export class Player {
 
     // movimento
     const [ax, az] = input.axis();
-    const maxSpeed = s.speed * this.zoneSlow;
+    const maxSpeed = s.speed * this.zoneSlow * (game.relics ? game.relics.getSpeedMult() : 1.0);
     if (this.dashTimer > 0) {
       this.dashTimer -= dt;
       this.vx = this.dashDirX * 62;
@@ -523,6 +586,15 @@ export class Player {
       game.vfx.muzzle(this.x, 1, this.z, Math.atan2(-this.dashDirX, -this.dashDirZ), this.hero.color, 2);
       game.shockwaves.spawn(this.x, this.z, this.hero.color, { endR: 3.5, duration: 0.28 });
       game.world.ripple(this.x, this.z, 0.6);
+
+      // Relic: Tesla Battery
+      if (game.relics && game.relics.has('tesla_battery')) {
+        game.projectiles.fireTeslaChain(this.x, this.z, this.stats.damage * 2.2, 5, game, true, 'tesla_battery');
+      }
+      // Relic: Vacuum Reactor
+      if (game.relics && game.relics.has('vacuum_reactor')) {
+        game.projectiles.spawnMicroVortex(this.x, this.z, this.stats.damage * 1.5);
+      }
     }
 
     // ultimate
@@ -572,6 +644,45 @@ export class Player {
     // armadilhas do macedo
     this.updateMacedoTraps(dt, game);
 
+    // Ascension: Big Interceptador Relâmpago (Pós-Combustão Contínua)
+    if (this.ascensionPerk === 'big_lightning_interceptor') {
+      this.bigAfterburnerTick -= dt;
+      if (this.bigAfterburnerTick <= 0) {
+        this.bigAfterburnerTick = 0.15;
+        game.particles.burst(this.x, 0.4, this.z, 4, 0xffaa00, { speed: 4, life: 0.4, size: 0.35, gravity: 0 });
+        query.length = 0;
+        game.enemies.query(this.x, this.z, 3.8, query);
+        for (const e of query) {
+          if (!e.dead) {
+            game.damageEnemy(e, s.damage * 0.45, false, 'normal');
+            game.enemies.applyBurn(e, s.damage * 0.35, 2.0, 0xff6600);
+          }
+        }
+      }
+    }
+
+    // Ascension: Thiago Alquimista Cáustico (Cura ao pisar em ácido)
+    if (this.ascensionPerk === 'thiago_caustic_alchemist' && game.groundHazards) {
+      if (game.groundHazards.isInHazard(this.x, this.z, 'acid')) {
+        this.heal(14 * dt);
+      }
+    }
+
+    // Ascension: Pietro Guardião Esotérico (Deflexão e aura rúnica defensiva)
+    if (this.ascensionPerk === 'pietro_esoteric_guardian') {
+      game.projectiles.clearEnemyInRadius(this.x, this.z, 4.2, game);
+      if (Math.random() < 0.2) {
+        game.particles.ring(this.x, 1.0, this.z, 12, 0xc05cff, 3.5, 4, 0.25, 0.2);
+      }
+      query.length = 0;
+      game.enemies.query(this.x, this.z, 4.2, query);
+      for (const e of query) {
+        if (!e.dead) {
+          game.damageEnemy(e, s.damage * 0.4 * dt, false, 'normal');
+        }
+      }
+    }
+
     // visual
     const speedNow = Math.hypot(this.vx, this.vz);
     const fwdX = Math.sin(this.aimAngle), fwdZ = Math.cos(this.aimAngle);
@@ -588,7 +699,7 @@ export class Player {
     if (this.invulnTimer > 0 && this.dashTimer <= 0) this.group.visible = Math.floor(this.time * 24) % 2 === 0;
     this.rig.animate(dt, { firing: this.fireAnim, speed: speedNow / s.speed, ultActive: this.ultActive, time: this.time });
     this.group.updateMatrixWorld(true);
-    this.light.intensity = 18 + this.fireAnim * 12 + (this.dashing ? 24 : 0);
+    this.light.intensity = 8 + this.fireAnim * 5 + (this.dashing ? 8 : 0);
 
     // trilhas
     const inten = 0.35 + clamp(speedNow / s.speed, 0, 1) * 0.65 + (this.dashing ? 1.2 : 0);
@@ -624,6 +735,7 @@ export class Player {
 
     switch (this.hero.id) {
       case 'big': {
+        const isSiege = this.ascensionPerk === 'big_siege_cannoneer';
         const n = (evo ? 2 : 1) + s.multishot;
         this.muzzleIdx ^= 1;
         this.tmp.copy(this.rig.muzzles[this.muzzleIdx]).applyMatrix4(this.rig.group.matrixWorld);
@@ -632,13 +744,14 @@ export class Player {
           const sp = (evo ? 58 : 48) * s.projSpeed;
           game.projectiles.spawn({
             kind: 'laser', x: this.tmp.x, z: this.tmp.z, y: this.tmp.y, vx: Math.sin(a) * sp, vz: Math.cos(a) * sp,
-            dmg: s.damage * (evo ? 2.2 : 1), life: 1.4, radius: evo ? 0.5 : 0.32, pierce: s.pierce + (evo ? 4 : 0),
-            ricochet: s.ricochet + (evo ? 1 : 0), color: evo ? 0xffffff : color, trail: 0.45, knock: s.knockback * (evo ? 1.5 : 1),
-            scale: evo ? 1.6 : 1, weaponSource: evo ? 'singularity_cannon' : 'primary',
+            dmg: s.damage * (evo ? 2.2 : 1) * (isSiege ? 2.0 : 1.0), life: 1.4, radius: evo ? 0.5 : 0.32, pierce: s.pierce + (evo ? 4 : 0),
+            ricochet: s.ricochet + (evo ? 1 : 0), color: isSiege ? 0xff4422 : (evo ? 0xffffff : color), trail: 0.45, knock: s.knockback * (evo ? 1.5 : 1),
+            scale: (evo ? 1.6 : 1) * (isSiege ? 1.35 : 1.0), weaponSource: evo ? 'singularity_cannon' : (isSiege ? 'plasma_cannon' : 'primary'),
+            aoeRadius: isSiege ? 3.2 : 0,
           });
         }
-        game.particles.burst(this.tmp.x, this.tmp.y, this.tmp.z, evo ? 8 : 4, color, { speed: 6, life: 0.25, size: 0.3, gravity: 0 });
-        game.vfx.muzzle(this.tmp.x, this.tmp.y, this.tmp.z, aim, color, evo ? 1.5 : 1);
+        game.particles.burst(this.tmp.x, this.tmp.y, this.tmp.z, evo ? 8 : 4, isSiege ? 0xff4422 : color, { speed: 6, life: 0.25, size: 0.3, gravity: 0 });
+        game.vfx.muzzle(this.tmp.x, this.tmp.y, this.tmp.z, aim, isSiege ? 0xff4422 : color, evo ? 1.5 : 1);
         game.audio.shoot('big');
         break;
       }
@@ -684,17 +797,21 @@ export class Player {
         break;
       }
       case 'carlinhos': {
+        if (this.ascensionPerk === 'carlinhos_celestial_harmony') {
+          this.celestialShield = Math.min(100, this.celestialShield + 14);
+        }
+        const isResonant = this.ascensionPerk === 'carlinhos_resonant_love';
         const radius = (evo ? 16 : 9.5) * s.area + s.multishot * 0.8;
-        const dmg = s.damage * (evo ? 2.3 : 1);
-        game.shockwaves.spawn(this.x, this.z, evo ? 0xfff077 : 0xffcc44, {
+        const dmg = s.damage * (evo ? 2.3 : 1) * (isResonant ? 2.5 : 1.0);
+        game.shockwaves.spawn(this.x, this.z, isResonant ? 0xff44aa : (evo ? 0xfff077 : 0xffcc44), {
           startR: 0.8,
           endR: radius,
           duration: 0.48,
           thick: true,
           intensity: 3.8,
         });
-        game.domes.spawn(this.x, 0.8, this.z, 0xffcc44, radius * 0.8, 0.42);
-        game.lights.flash(this.x, 2.5, this.z, 0xffcc44, 1500, 0.4, 35);
+        game.domes.spawn(this.x, 0.8, this.z, isResonant ? 0xff44aa : 0xffcc44, radius * 0.8, 0.42);
+        game.lights.flash(this.x, 2.5, this.z, isResonant ? 0xff44aa : 0xffcc44, 1500, 0.4, 35);
         game.camera.shake(0.12);
         game.audio.shoot('carlinhos');
 
@@ -730,7 +847,11 @@ export class Player {
             }
           }
         }
-        game.projectiles.clearEnemyInRadius(this.x, this.z, radius * 0.85, game);
+        if (isResonant) {
+          game.projectiles.clearAll(true);
+        } else {
+          game.projectiles.clearEnemyInRadius(this.x, this.z, radius * 0.85, game);
+        }
         if (evo && hits > 0) {
           this.heal(Math.min(6, hits * 0.75));
           game.particles.burst(this.x, 1.2, this.z, 16, 0xfff0aa, { speed: 8, life: 0.6, size: 0.35, gravity: -2 });
@@ -867,6 +988,21 @@ export class Player {
     game.enemies.query(this.x, this.z, radius + 3, query);
     let hits = 0;
     const dmg = s.damage * (evo ? 2.2 : 1);
+    if (this.ascensionPerk === 'otton_dimensional_blade') {
+      game.projectiles.spawn({
+        kind: 'rail',
+        x: this.x + fx * 0.8, z: this.z + fz * 0.8, y: 1.0,
+        vx: fx * 55, vz: fz * 55,
+        dmg: dmg * 1.35,
+        life: 1.3,
+        radius: 1.1,
+        pierce: 999,
+        color: 0xff2050,
+        scale: 1.8,
+        trail: 0.8,
+        weaponSource: 'dimensional_blade',
+      });
+    }
     for (const e of query) {
       if (e.dead) continue;
       const dx = e.x - this.x, dz = e.z - this.z;
@@ -960,10 +1096,12 @@ export class Player {
         }
       }
 
+      const isMesh = this.ascensionPerk === 'macedo_telematic_mesh';
+      const isPulsar = this.ascensionPerk === 'macedo_static_pulsar';
       t.pulseTimer -= dt;
       if (t.pulseTimer <= 0) {
         const magnetLvl = this.upgrades.hero_macedo_magnetic_traps ?? 0;
-        const pulseMult = 1 + magnetLvl * 0.30;
+        const pulseMult = (1 + magnetLvl * 0.30) * (isPulsar ? 2.0 : 1.0);
         t.pulseTimer = (0.45 / pulseMult) / s.fireRate;
         game.shockwaves.spawn(t.x, t.z, 0x44ddff, { startR: 0.5, endR: t.size, duration: 0.32, thick: false });
         query.length = 0;
@@ -974,7 +1112,7 @@ export class Player {
           if (Math.hypot(dx, dz) <= t.size + e.radius * e.size) {
             game.recordDamage(dmg, evo ? 'telematics_network' : 'primary');
             game.damageEnemy(e, dmg, Math.random() < s.critChance, 'normal');
-            e.stun = Math.max(e.stun, 0.22);
+            e.stun = Math.max(e.stun, isPulsar ? 1.5 : 0.22);
             game.particles.burst(e.x, 1, e.z, 4, 0x44ddff, { speed: 5, life: 0.2, size: 0.25 });
           }
         }
@@ -990,12 +1128,12 @@ export class Player {
           }
         }
 
-        // Se evoluído (Rede Neural Telemática), conecta arcos elétricos com outras armadilhas
-        if (evo && this.macedoTraps.length > 1) {
+        // Se evoluído (Rede Neural Telemática) ou perk Telematic Mesh, conecta arcos elétricos com outras armadilhas
+        if ((evo || isMesh) && this.macedoTraps.length > 1) {
           for (const other of this.macedoTraps) {
             if (other === t) continue;
             const distTraps = Math.hypot(other.x - t.x, other.z - t.z);
-            if (distTraps < 28) {
+            if (distTraps < 32) {
               game.particles.burst((t.x + other.x) * 0.5, 0.6, (t.z + other.z) * 0.5, 3, 0x88eeff, { speed: 2, life: 0.15, size: 0.2 });
               for (const e of game.enemies.list) {
                 if (e.dead) continue;
@@ -1004,9 +1142,9 @@ export class Player {
                 if (tx >= 0 && tx <= 1) {
                   const px = t.x + tx * (other.x - t.x);
                   const pz = t.z + tx * (other.z - t.z);
-                  if (Math.hypot(e.x - px, e.z - pz) < 1.8) {
-                    game.damageEnemy(e, dmg * 0.75, false, 'normal');
-                    e.stun = Math.max(e.stun, 0.35);
+                  if (Math.hypot(e.x - px, e.z - pz) < 2.0) {
+                    game.damageEnemy(e, dmg * (isMesh ? 1.2 : 0.75), false, 'normal');
+                    e.stun = Math.max(e.stun, isPulsar ? 1.5 : 0.35);
                   }
                 }
               }
@@ -1120,6 +1258,20 @@ export class Player {
             weaponSource: sec.evolved ? 'singularity_well' : 'gravity_well',
           });
           game.audio.gravityImplosion();
+        } else if (id === 'flamethrower') {
+          const cd = (def.cooldown * (sec.evolved ? 0.75 : 1.0)) / s.fireRate;
+          sec.timer = cd;
+          const dmg = def.baseDmg * (sec.evolved ? 2.5 : 1.0) * (s.damage / this.hero.damage);
+          game.projectiles.fireFlamethrower(this.x, this.z, this.aimAngle, dmg, sec.evolved, game, s.multishot);
+        } else if (id === 'railgun') {
+          const cd = (def.cooldown * (sec.evolved ? 0.7 : 0.9)) / s.fireRate;
+          sec.timer = cd;
+          const dmg = def.baseDmg * (sec.evolved ? 2.6 : 1.0) * (s.damage / this.hero.damage);
+          game.projectiles.fireRailgun(this.x, this.z, this.aimAngle, dmg, sec.evolved, game);
+          for (let i = 1; i <= s.multishot; i++) {
+            game.projectiles.fireRailgun(this.x, this.z, this.aimAngle + i * 0.12, dmg * 0.85, sec.evolved, game);
+            game.projectiles.fireRailgun(this.x, this.z, this.aimAngle - i * 0.12, dmg * 0.85, sec.evolved, game);
+          }
         }
       }
     }
@@ -1195,8 +1347,9 @@ export class Player {
       }
       case 'pietro': {
         const liturgyLvl = this.upgrades.hero_pietro_eternal_orbit ?? 0;
-        this.ultTimer = 9 + liturgyLvl * 3.5;
-        this.pietroGlyphLaserTimer = 0.3;
+        const isHerald = this.ascensionPerk === 'pietro_herald_of_void';
+        this.ultTimer = (isHerald ? 14 : 9) + liturgyLvl * 3.5;
+        this.pietroGlyphLaserTimer = 0.2;
         this.ultActive = true;
         this.glyphHits.clear();
         for (const m of this.glyphMeshes) m.visible = true;
@@ -1451,26 +1604,27 @@ export class Player {
         }
       }
 
-      // Liturgia Ancestral: raios cósmicos adicionais
-      if (liturgyLvl > 0) {
+      // Liturgia Ancestral & Arauto do Vácuo: raios cósmicos adicionais
+      const isHerald = this.ascensionPerk === 'pietro_herald_of_void';
+      if (liturgyLvl > 0 || isHerald) {
         this.pietroGlyphLaserTimer -= dt;
         if (this.pietroGlyphLaserTimer <= 0) {
-          this.pietroGlyphLaserTimer = 0.45;
+          this.pietroGlyphLaserTimer = isHerald ? 0.22 : 0.45;
           for (const gp of this.glyphPositions) {
-            const target = game.enemies.nearest(gp.x, gp.z, 22);
+            const target = game.enemies.nearest(gp.x, gp.z, 26);
             if (target) {
               const la = Math.atan2(target.x - gp.x, target.z - gp.z);
-              const sp = 45 * s.projSpeed;
+              const sp = 48 * s.projSpeed;
               game.projectiles.spawn({
                 kind: 'laser',
                 x: gp.x, z: gp.z, y: 2.2,
                 vx: Math.sin(la) * sp, vz: Math.cos(la) * sp,
-                dmg: s.damage * (0.8 + liturgyLvl * 0.35),
+                dmg: s.damage * (isHerald ? 1.8 : 0.8 + liturgyLvl * 0.35),
                 life: 0.9,
                 radius: 0.35,
-                color: 0xd888ff,
-                pierce: 1,
-                weaponSource: 'liturgy',
+                color: isHerald ? 0x9333ea : 0xd888ff,
+                pierce: isHerald ? 4 : 1,
+                weaponSource: isHerald ? 'herald_void' : 'liturgy',
               });
               game.particles.burst(gp.x, 2.2, gp.z, 4, 0xc05cff, { speed: 4, life: 0.2, size: 0.2 });
             }

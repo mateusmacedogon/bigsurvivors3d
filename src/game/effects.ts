@@ -25,7 +25,7 @@ void main() {
   float flow = 0.82 + 0.18 * sin(angle * 32.0 - uAge * 24.0 + radius * 18.0);
   float tips = uSlash > 0.5 ? 1.0 - smoothstep(0.65, 1.13, abs(angle)) : 1.0;
   float core = pow(rim, 6.0);
-  vec3 color = mix(uColor, vec3(2.8), core * 0.45);
+  vec3 color = mix(uColor, vec3(1.7), core * 0.45);
   gl_FragColor = vec4(color, rim * tips * flow * uAlpha);
 }
 `;
@@ -312,7 +312,7 @@ export class LightPool {
     if (!l) { l = this.pool[this.cursor]; this.cursor = (this.cursor + 1) % this.pool.length; }
     l.active = true;
     l.life = l.maxLife = duration;
-    l.peak = intensity * 0.35;
+    l.peak = Math.min(intensity * 0.06, 50);
     l.light.color.setHex(color);
     l.light.position.set(x, y, z);
     l.light.distance = distance;

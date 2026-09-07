@@ -689,6 +689,30 @@ export class EnemyManager {
     } else {
       game.audio.enemyDeath();
     }
+    // Thiago Ascension: Vetor Epidêmico (explosão venenosa ao morrer se corroído)
+    if (game.player?.ascensionPerk === 'thiago_epidemic_vector' && (e.burn > 0 || e.burnColor === 0x8cff2a)) {
+      const poisonDmg = game.player.stats.damage * 3.5;
+      game.shockwaves.spawn(e.x, e.z, 0x8cff2a, { endR: 6.5, duration: 0.35 });
+      game.particles.burst(e.x, e.y + 0.5, e.z, 24, 0x8cff2a, { speed: 8, life: 0.5, size: 0.4 });
+      for (const other of this.list) {
+        if (!other.dead && other !== e && Math.hypot(other.x - e.x, other.z - e.z) <= 6.5) {
+          this.damage(other, poisonDmg, game, true, 'corrode');
+          this.applyBurn(other, poisonDmg * 0.4, 4.0, 0x8cff2a);
+        }
+      }
+    }
+    // Pacto Horda Feroz: poças cáusticas deixadas na morte dos inimigos
+    if (game.hasPact('ferocious_horde') && e.type !== 'mine' && e.type !== 'kamikaze') {
+      game.groundHazards.spawn({
+        x: e.x, z: e.z,
+        radius: 2.4,
+        duration: 3.5,
+        dps: 16,
+        type: 'acid',
+        color: 0x8cff2a,
+        source: 'ferocious_horde',
+      });
+    }
     game.onEnemyKilled(e);
   }
 
@@ -830,7 +854,14 @@ export class EnemyManager {
         }
       }
 
-      const mul = (e.frozen > 0 ? 0.22 : 1) * (e.stun > 0 ? 0 : 1);
+      let gameEnemySpeed = (game.hyperMode ? 1.25 : 1.0) * (game.hasPact('ferocious_horde') ? 1.25 : 1.0) * (game.relics ? game.relics.getEnemySpeedMult() : 1.0);
+      if (game.arenaEvents && game.arenaEvents.isGravityStormActive()) {
+        gameEnemySpeed *= 0.65;
+      }
+      if ((e.frozen > 0 || e.stun > 0) && game.relics) {
+        game.relics.triggerChronos();
+      }
+      const mul = (e.frozen > 0 ? 0.22 : 1) * (e.stun > 0 ? 0 : 1) * gameEnemySpeed;
 
       // knockback
       e.x += e.kx * dt; e.z += e.kz * dt;

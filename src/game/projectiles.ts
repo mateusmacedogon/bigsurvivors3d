@@ -5,8 +5,8 @@ import type { Telegraph } from './telegraphs';
 import type { Game } from './game';
 import type { Enemy } from './enemies';
 
-export type ProjKind = 'laser' | 'drop' | 'rune' | 'orb' | 'ebullet' | 'ebomb' | 'missile' | 'saw' | 'vortex';
-const KINDS: ProjKind[] = ['laser', 'drop', 'rune', 'orb', 'ebullet', 'ebomb', 'missile', 'saw', 'vortex'];
+export type ProjKind = 'laser' | 'drop' | 'rune' | 'orb' | 'ebullet' | 'ebomb' | 'missile' | 'saw' | 'vortex' | 'flame' | 'rail';
+const KINDS: ProjKind[] = ['laser', 'drop', 'rune', 'orb', 'ebullet', 'ebomb', 'missile', 'saw', 'vortex', 'flame', 'rail'];
 
 export interface Projectile {
   active: boolean;
@@ -98,6 +98,7 @@ export class ProjectileSystem {
   private shadow: THREE.InstancedMesh;
   private dummy = new THREE.Object3D();
   private time = 0;
+  private hadronFissures: Array<{ x: number; z: number; timer: number; dmg: number }> = [];
   glyphAtlas: THREE.CanvasTexture;
   private glyphMat: THREE.ShaderMaterial;
   private cellAttr: THREE.InstancedBufferAttribute;
@@ -130,6 +131,8 @@ export class ProjectileSystem {
     const sawGeo = new THREE.TorusGeometry(0.65, 0.16, 6, 16);
     sawGeo.rotateX(Math.PI / 2);
     const vortexGeo = new THREE.SphereGeometry(0.5, 10, 8);
+    const flameGeo = new THREE.SphereGeometry(0.32, 6, 5);
+    const railGeo = new THREE.BoxGeometry(0.24, 0.24, 4.0);
     const runeGeo = new THREE.PlaneGeometry(1.2, 1.2);
     runeGeo.rotateX(-Math.PI / 2);
     this.cellAttr = new THREE.InstancedBufferAttribute(new Float32Array(600), 1);
@@ -155,6 +158,8 @@ export class ProjectileSystem {
       missile: mk(missileGeo, basic(), 400),
       saw: mk(sawGeo, basic(), 200),
       vortex: mk(vortexGeo, basic(), 120),
+      flame: mk(flameGeo, basic(), 600),
+      rail: mk(railGeo, basic(), 250),
     };
     const shGeo = new THREE.CircleGeometry(0.6, 16);
     shGeo.rotateX(-Math.PI / 2);
@@ -256,6 +261,32 @@ export class ProjectileSystem {
     const boss = game.boss;
     const glyphs = player.glyphPositions;
     const limit = ARENA_RADIUS + 6;
+
+    // Atualiza fissuras do Colisor de Hádrons
+    for (let i = this.hadronFissures.length - 1; i >= 0; i--) {
+      const f = this.hadronFissures[i];
+      f.timer -= dt;
+      if (Math.random() < 0.3) {
+        game.particles.emit(f.x, 0.8, f.z, 0, rand(0.5, 2.0), 0, 0.2, 0.3, 0.2, 0.9, 1, 0, 0, 0, 1);
+      }
+      if (f.timer <= 0) {
+        this.hadronFissures.splice(i, 1);
+        game.audio.hadronCollider();
+        game.shockwaves.spawn(f.x, f.z, 0x55ffff, { endR: 6.5, duration: 0.45, thick: true });
+        game.particles.burst(f.x, 0.8, f.z, 30, 0x55ffff, { speed: 12, life: 0.5, size: 0.4 });
+        query.length = 0;
+        enemies.query(f.x, f.z, 6.5, query);
+        for (const e of query) {
+          if (!e.dead) {
+            game.damageEnemy(e, f.dmg * 1.6, true, 'normal');
+            e.stun = Math.max(e.stun, 0.45);
+          }
+        }
+        if (boss && boss.hittable && Math.hypot(boss.x - f.x, boss.z - f.z) <= 6.5 + boss.radius) {
+          game.hitBossDirect(f.dmg * 1.6, 'hadron_collider');
+        }
+      }
+    }
 
     for (const p of this.pool) {
       if (!p.active) continue;
@@ -400,6 +431,17 @@ export class ProjectileSystem {
       }
       this.updateTrail(p, dt, game);
 
+      if (p.kind === 'flame') {
+        p.scale += dt * 3.2;
+        if (Math.random() < 0.45) {
+          game.particles.emit(p.x, p.y, p.z, rand(-0.3, 0.3), rand(0.2, 0.8), rand(-0.3, 0.3), 0.2, 0.25 * p.scale, p.r, p.g, p.b, 0, 0, 0, 1);
+        }
+      } else if (p.kind === 'rail') {
+        if (Math.random() < 0.75) {
+          game.particles.emit(p.x, p.y, p.z, 0, 0.1, 0, 0.12, 0.35, p.r, p.g, p.b, 0, 0, 0, 1);
+        }
+      }
+
       if (p.trail > 0 && Math.random() < p.trail) {
         game.particles.emit(p.x, p.y, p.z, -p.vx * 0.05, 0.4, -p.vz * 0.05, 0.25, 0.28 * p.scale, p.r, p.g, p.b, 0, 0, 0, 1);
       }
@@ -416,11 +458,20 @@ export class ProjectileSystem {
           if (dx * dx + dz * dz > rr * rr) continue;
           game.hitEnemyWithProjectile(e, p);
           p.hits.push(e.id);
-          hitSomething = true;
-          if (p.kind === 'missile' && p.aoeRadius > 0) {
-            game.vfx.explosion(p.x, p.y, p.z, 0xff7020, p.aoeRadius * 0.7, 1);
-            game.shockwaves.spawn(p.x, p.z, 0xff7020, { endR: p.aoeRadius, duration: 0.35 });
-            game.particles.burst(p.x, p.y, p.z, 20, 0xff7020, { speed: 9, life: 0.45, size: 0.3 });
+          if (p.kind === 'flame') {
+            const flameBurnDps = p.dmg * (p.weaponSource === 'solar_inferno' ? 1.4 : 0.8);
+            const flameDur = p.weaponSource === 'solar_inferno' ? 5.5 : 3.2;
+            const flameCol = p.weaponSource === 'solar_inferno' ? 0xff2200 : 0xff4500;
+            game.enemies.applyBurn(e, flameBurnDps, flameDur, flameCol);
+          }
+          if (p.weaponSource === 'hadron_collider') {
+            this.hadronFissures.push({ x: e.x, z: e.z, timer: 0.8, dmg: p.dmg });
+          }
+          if (p.aoeRadius > 0) {
+            const blastCol = p.kind === 'missile' ? 0xff7020 : (p.r ? tmpColor.setRGB(p.r, p.g, p.b).getHex() : 0x00e5ff);
+            game.vfx.explosion(p.x, p.y, p.z, blastCol, p.aoeRadius * 0.7, 1);
+            game.shockwaves.spawn(p.x, p.z, blastCol, { endR: p.aoeRadius, duration: 0.35 });
+            game.particles.burst(p.x, p.y, p.z, 20, blastCol, { speed: 9, life: 0.45, size: 0.3 });
             game.audio.explosion(0.85);
             query.length = 0;
             enemies.query(p.x, p.z, p.aoeRadius, query);
@@ -430,8 +481,8 @@ export class ProjectileSystem {
               }
             }
           }
-          if (p.kind === 'saw') {
-            // as lâminas orbitais continuam girando
+          if (p.kind === 'saw' || p.kind === 'rail' || p.kind === 'flame') {
+            // continuam atravessando
           } else if (!this.afterHit(p, e.x, e.z, game)) break;
         }
         if (!p.active) continue;
@@ -441,13 +492,17 @@ export class ProjectileSystem {
           if (dx * dx + dz * dz < rr * rr) {
             game.hitBossWithProjectile(p);
             p.hits.push(-1);
-            if (p.kind === 'missile' && p.aoeRadius > 0) {
-              game.vfx.explosion(p.x, p.y, p.z, 0xff7020, p.aoeRadius * 0.7, 1);
-              game.shockwaves.spawn(p.x, p.z, 0xff7020, { endR: p.aoeRadius, duration: 0.35 });
-              game.particles.burst(p.x, p.y, p.z, 24, 0xff7020, { speed: 10, life: 0.45, size: 0.3 });
+            if (p.weaponSource === 'hadron_collider') {
+              this.hadronFissures.push({ x: boss.x, z: boss.z, timer: 0.8, dmg: p.dmg });
+            }
+            if (p.aoeRadius > 0) {
+              const blastCol = p.kind === 'missile' ? 0xff7020 : (p.r ? tmpColor.setRGB(p.r, p.g, p.b).getHex() : 0x00e5ff);
+              game.vfx.explosion(p.x, p.y, p.z, blastCol, p.aoeRadius * 0.7, 1);
+              game.shockwaves.spawn(p.x, p.z, blastCol, { endR: p.aoeRadius, duration: 0.35 });
+              game.particles.burst(p.x, p.y, p.z, 24, blastCol, { speed: 10, life: 0.45, size: 0.3 });
               game.audio.explosion(0.85);
             }
-            if (p.kind !== 'saw') this.afterHit(p, boss.x, boss.z, game);
+            if (p.kind !== 'saw' && p.kind !== 'rail' && p.kind !== 'flame') this.afterHit(p, boss.x, boss.z, game);
           }
         }
         if (p.active && game.arenaProps && game.arenaProps.crystals.length > 0) {
@@ -557,6 +612,7 @@ export class ProjectileSystem {
 
   /** Retorna true se o projétil continua ativo após o acerto. */
   private afterHit(p: Projectile, hx: number, hz: number, game: Game): boolean {
+    if (p.kind === 'saw' || p.kind === 'rail' || p.kind === 'flame') return true;
     if (p.pierce > 0) { p.pierce--; return true; }
     if (p.ricochet > 0) {
       p.ricochet--;
@@ -595,13 +651,16 @@ export class ProjectileSystem {
     if (p.weaponSource === 'burning_passion') {
       game.particles.burst(hx, 1.1, hz, 12, 0xff69b4, { speed: 5, life: 0.35, size: 0.3 });
     }
-    if (p.kind === 'drop' && !p.enemy && game.player.hero.id === 'thiago' && (game.player.upgrades.hero_thiago_caustic_puddle ?? 0) > 0) {
-      if (Math.random() < 0.30) {
-        const puddleLvl = game.player.upgrades.hero_thiago_caustic_puddle;
+    const hasPuddleUpgrade = (game.player.upgrades.hero_thiago_caustic_puddle ?? 0) > 0;
+    const isAlchemist = game.player.ascensionPerk === 'thiago_caustic_alchemist';
+    if (p.kind === 'drop' && !p.enemy && game.player.hero.id === 'thiago' && (hasPuddleUpgrade || isAlchemist)) {
+      if (Math.random() < (isAlchemist ? 0.40 : 0.30)) {
+        const puddleLvl = game.player.upgrades.hero_thiago_caustic_puddle ?? 1;
+        const dur = (3.0 + puddleLvl * 1.0) * (isAlchemist ? 2.0 : 1.0);
         game.groundHazards.spawn({
           x: hx, z: hz,
           radius: (2.2 + puddleLvl * 0.5) * game.player.stats.area,
-          duration: 3.0 + puddleLvl * 1.0,
+          duration: dur,
           dps: game.player.stats.damage * (1.2 + puddleLvl * 0.4),
           type: 'acid',
           color: 0x8cff2a,
@@ -614,7 +673,7 @@ export class ProjectileSystem {
   }
 
   private render() {
-    const counts: Record<ProjKind, number> = { laser: 0, drop: 0, rune: 0, orb: 0, ebullet: 0, ebomb: 0, missile: 0, saw: 0, vortex: 0 };
+    const counts: Record<ProjKind, number> = { laser: 0, drop: 0, rune: 0, orb: 0, ebullet: 0, ebomb: 0, missile: 0, saw: 0, vortex: 0, flame: 0, rail: 0 };
     let shadowCount = 0;
     const d = this.dummy;
     const pulse = 1 + Math.sin(this.time * 18) * 0.12;
@@ -628,6 +687,14 @@ export class ProjectileSystem {
         case 'laser':
           d.rotation.set(0, p.rot, 0);
           d.scale.set(p.scale, p.scale, p.scale * 1.15);
+          break;
+        case 'rail':
+          d.rotation.set(0, p.rot, 0);
+          d.scale.set(p.scale, p.scale, p.scale * 1.6);
+          break;
+        case 'flame':
+          d.rotation.set(0, p.rot, 0);
+          d.scale.setScalar(p.scale);
           break;
         case 'rune':
           d.rotation.set(0, p.rot, 0);
@@ -685,5 +752,99 @@ export class ProjectileSystem {
     this.cellAttr.needsUpdate = true;
     this.shadow.count = shadowCount;
     this.shadow.instanceMatrix.needsUpdate = true;
+  }
+
+  fireRailgun(x: number, z: number, angle: number, dmg: number, evolved: boolean, game: Game) {
+    const sp = 82;
+    const p = this.spawn({
+      kind: 'rail',
+      x, z, y: 1.0,
+      vx: Math.sin(angle) * sp,
+      vz: Math.cos(angle) * sp,
+      dmg,
+      life: 1.6,
+      radius: evolved ? 1.0 : 0.65,
+      pierce: 999,
+      color: evolved ? 0x55ffff : 0x00ffff,
+      scale: evolved ? 1.8 : 1.25,
+      trail: 1.0,
+      weaponSource: evolved ? 'hadron_collider' : 'railgun',
+    });
+    if (p) {
+      game.audio.railgun();
+      game.shockwaves.spawn(x, z, evolved ? 0x55ffff : 0x00ffff, { endR: 3.8, duration: 0.25 });
+    }
+  }
+
+  fireFlamethrower(x: number, z: number, baseAngle: number, dmg: number, evolved: boolean, game: Game, multishot = 0) {
+    const sp = rand(22, 28);
+    const count = evolved ? 12 : (2 + multishot);
+    const spread = evolved ? (Math.PI * 2) : 0.45;
+    const startAngle = evolved ? 0 : baseAngle - spread * 0.5;
+
+    for (let i = 0; i < count; i++) {
+      const a = evolved
+        ? (i / count) * Math.PI * 2 + rand(-0.15, 0.15)
+        : startAngle + (i / Math.max(1, count - 1)) * spread + rand(-0.08, 0.08);
+      const speed = sp * rand(0.85, 1.15);
+      this.spawn({
+        kind: 'flame',
+        x: x + Math.sin(a) * 0.8,
+        z: z + Math.cos(a) * 0.8,
+        y: 0.9,
+        vx: Math.sin(a) * speed,
+        vz: Math.cos(a) * speed,
+        dmg,
+        life: rand(0.32, 0.48),
+        radius: evolved ? 0.85 : 0.55,
+        pierce: 999,
+        color: evolved ? 0xff2200 : 0xff4500,
+        scale: evolved ? 1.4 : 0.9,
+        trail: 0.8,
+        weaponSource: evolved ? 'solar_inferno' : 'flamethrower',
+      });
+    }
+    if (evolved) {
+      game.audio.solarInferno();
+    } else {
+      game.audio.flamethrower();
+    }
+  }
+
+  fireRefractionLasers(x: number, z: number, baseAngle: number, dmg: number, game: Game) {
+    const sp = 38;
+    game.audio.laser();
+    const angles = [baseAngle - 0.32, baseAngle, baseAngle + 0.32];
+    for (const a of angles) {
+      this.spawn({
+        kind: 'laser',
+        x, z, y: 0.9,
+        vx: Math.sin(a) * sp,
+        vz: Math.cos(a) * sp,
+        dmg: dmg * 0.65,
+        life: 1.2,
+        radius: 0.3,
+        color: 0x38bdf8,
+        scale: 0.85,
+        trail: 0.5,
+        weaponSource: 'refraction_prism',
+      });
+    }
+  }
+
+  spawnMicroVortex(x: number, z: number, dmg: number) {
+    this.spawn({
+      kind: 'vortex',
+      x, z, y: 0.9,
+      vx: 0, vz: 0,
+      dmg: dmg * 0.6,
+      life: 0.8,
+      radius: 0.8,
+      pullRadius: 6.5,
+      color: 0xc084fc,
+      scale: 0.9,
+      spin: 10,
+      weaponSource: 'vacuum_reactor',
+    });
   }
 }

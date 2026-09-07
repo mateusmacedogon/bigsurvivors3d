@@ -33,7 +33,7 @@ void main() {
   float small = gridLine(p * 0.5, 1.1);
   float big = gridLine(p * 0.1, 1.4);
   float fade = exp(-d * 0.028);
-  float playerGlow = exp(-d * d * 0.015) * 0.9;
+  float playerGlow = exp(-d * d * 0.02) * 0.45;
   float ripple = 0.0;
   for (int i = 0; i < 10; i++) {
     vec4 r = uRipples[i];
@@ -49,10 +49,10 @@ void main() {
   float tilePulse = 0.5 + 0.5 * sin(uTime * 1.5 + sparkle * 6.283 + d * 0.15);
   float fill = 0.045 + 0.05 * tilePulse * fade;
 
-  vec3 col = uColor * (small * 0.28 + big * 0.9) * (0.3 + fade * 1.1 + playerGlow * 1.5);
-  col += uColor2 * fill * 1.3;
-  col += mix(uColor, vec3(1.0), 0.5) * ripple * 2.2 * (small * 0.6 + big + 0.35);
-  col += uColor * playerGlow * 0.35 * uPulse;
+  vec3 col = uColor * (small * 0.22 + big * 0.65) * (0.25 + fade * 0.65 + playerGlow * 0.55);
+  col += uColor2 * fill * 1.1;
+  col += mix(uColor, vec3(1.0), 0.35) * ripple * 1.6 * (small * 0.5 + big * 0.75 + 0.25);
+  col += uColor * playerGlow * 0.18 * uPulse;
 
   float rim = 1.0 - smoothstep(uArena - 1.5, uArena, length(p));
   float alpha = (small * 0.45 + big * 0.7) * (0.28 + fade * 0.9) + fill + ripple * 0.6;
@@ -178,7 +178,7 @@ void main() {
   col += vec3(1.0) * spec * 0.4;
   float pulse = 0.85 + 0.15 * sin(uTime * 6.0 + vWorldPos.x * 0.6 + vWorldPos.z * 0.6);
   col *= pulse;
-  col = mix(col, vec3(3.5, 3.5, 3.5), clamp(vFlash, 0.0, 1.0));
+  col = mix(col, vec3(1.8, 1.8, 1.8), clamp(vFlash, 0.0, 1.0));
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -315,7 +315,7 @@ void main() {
   if (d > 0.5) discard;
   float a = smoothstep(0.5, 0.0, d);
   a = a * a;
-  gl_FragColor = vec4(vColor * vAlpha * a * 2.2, vAlpha * a);
+  gl_FragColor = vec4(vColor * vAlpha * a * 1.3, vAlpha * a);
 }
 `;
 
@@ -488,7 +488,7 @@ void main() {
   col = max(vec3(0.0), col);
   float lum = dot(col, vec3(0.299, 0.587, 0.114));
   col = mix(col, vec3(lum), uDesat);
-  col = mix(col, uFlashColor, clamp(uFlash, 0.0, 1.0));
+  col = mix(col, uFlashColor, clamp(uFlash, 0.0, 0.40));
   gl_FragColor = vec4(max(vec3(0.0), col), 1.0);
 }
 `;

@@ -399,13 +399,21 @@ export class ArenaPropManager {
           game.audio.achievement();
           game.flash(0.6, 0xffd700);
           game.particles.burst(drop.x, 2, drop.z, 120, 0xffd700, { speed: 18, life: 1.2, size: 0.6 });
-          // Concede baú lendário: 3 upgrades de nível e 50 shards!
+          // Concede baú lendário: 2 upgrades de nível, 50 shards e Relíquia Cósmica!
           game.shards += 50;
           game.coins += 25;
           pl.heal(pl.stats.maxHp);
           pl.level += 2;
           game.pendingLevels += 2;
-          game.notice('SUPRIMENTOS SPACEX COLETADOS!', '+2 Níveis instantâneos · +50 Shards · Vida Cheia', '#ffd700');
+          if (pl.level >= 10 && !pl.ascensionPerk) {
+            game.pendingAscension = true;
+          }
+          const relic = game.grantRandomRelic();
+          game.notice(
+            'SUPRIMENTOS SPACEX COLETADOS!',
+            `+2 Níveis instantâneos · +50 Shards · Vida Cheia${relic ? ` · Relíquia: ${relic.name}` : ''}`,
+            '#ffd700'
+          );
         }
       }
     }

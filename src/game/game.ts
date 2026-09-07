@@ -9,6 +9,7 @@ import {
   ARENA_RADIUS, BOSS_WAVE, ENEMY_DEFS, MAX_ENEMIES, RARITY_MULT, UPGRADES, WAVE_DURATION, clamp, damp, heroById, rand, xpForLevel,
   SECONDARY_WEAPONS, PRIMARY_EVOLUTIONS, type ActiveWeaponState, type SecondaryWeaponId,
   type EnemyType, type GamePhase, type HeroId, type Notice, type Rarity, type RunResult, type Snapshot, type UpgradeChoice,
+  type GameMode, type PactId, PACTS, ASCENSION_PERKS, type AscensionPerkDef,
 } from './config';
 import { getMetaBonuses, recordRun, unlockAchievement } from './save';
 import { AudioEngine } from './audio';
@@ -28,6 +29,9 @@ import { buildShip, type ShipRig } from './ships';
 import { ArenaPropManager } from './arenaProps';
 import { GroundHazardSystem } from './groundHazards';
 import { JuliaHeartSystem } from './juliaHearts';
+import { RelicManager, ALL_RELIC_IDS, type RelicDef } from './relics';
+import { ArenaEventManager, type ArenaEventType } from './arenaEvents';
+import { recordMatchHistory, recordCareerRun } from './history';
 import { loadSettings, onSettingsChange, updateSetting, type GameSettings, type GraphicQuality } from './settings';
 
 const RARITY_WEIGHTS: [Rarity, number][] = [['common', 55], ['rare', 28], ['epic', 13], ['legendary', 4]];
@@ -60,8 +64,24 @@ export class Game {
   arenaProps: ArenaPropManager;
   groundHazards: GroundHazardSystem;
   juliaHearts: JuliaHeartSystem;
+  relics: RelicManager;
+  arenaEvents: ArenaEventManager;
   player!: Player;
   boss: Boss | null = null;
+
+  gameMode: GameMode = 'classic';
+  pacts: PactId[] = [];
+  hyperMode = false;
+  bossRush = false;
+  ascensionChoice: [AscensionPerkDef, AscensionPerkDef] | null = null;
+  pendingAscension = false;
+  penumbraLight: THREE.SpotLight | null = null;
+  killsThisRun: Record<string, number> = {};
+  unstableGroundTimer = 1.0;
+
+  hasPact(pact: PactId): boolean {
+    return this.pacts.includes(pact);
+  }
 
   phase: GamePhase = 'menu';
   time = 0;
@@ -124,7 +144,7 @@ export class Game {
     this.renderer.setPixelRatio(pr);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 0.90;
     this.scene.background = new THREE.Color(0x02010a);
     this.camera = new CameraRig(window.innerWidth / window.innerHeight);
 
@@ -132,7 +152,7 @@ export class Game {
     this.composer.setPixelRatio(pr);
     this.composer.setSize(window.innerWidth, window.innerHeight);
     this.composer.addPass(new RenderPass(this.scene, this.camera.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 1.15, 0.55, 0.6);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.45, 0.40, 0.85);
     this.composer.addPass(this.bloom);
     this.fxPass = new ShaderPass({
       uniforms: {
@@ -175,6 +195,8 @@ export class Game {
     this.arenaProps = new ArenaPropManager(this.scene);
     this.groundHazards = new GroundHazardSystem(this.scene);
     this.juliaHearts = new JuliaHeartSystem(this.scene);
+    this.relics = new RelicManager();
+    this.arenaEvents = new ArenaEventManager(this.scene);
 
     this.applySettings(loadSettings());
     onSettingsChange(s => this.applySettings(s));
@@ -193,9 +215,9 @@ export class Game {
     this.vfx.setQuality(s.graphicsQuality);
     this.numbers.mode = s.damageNumbers;
     if (this.bloom) {
-      if (s.graphicsQuality === 'low') this.bloom.strength = 0.35;
-      else if (s.graphicsQuality === 'medium') this.bloom.strength = 0.75;
-      else if (s.graphicsQuality === 'high') this.bloom.strength = 1.15;
+      if (s.graphicsQuality === 'low') this.bloom.strength = 0.18;
+      else if (s.graphicsQuality === 'medium') this.bloom.strength = 0.32;
+      else if (s.graphicsQuality === 'high') this.bloom.strength = 0.45;
     }
     if (this.fxaaPass) {
       this.fxaaPass.enabled = s.graphicsQuality !== 'low';
@@ -253,35 +275,89 @@ export class Game {
     this.world.setTheme(heroById(id).color);
   }
 
-  start(heroId: HeroId) {
+  start(heroId: HeroId, mode: GameMode = 'classic', pacts: PactId[] = []) {
     this.audio.init();
     this.audio.resume();
     this.heroId = heroId;
+    this.gameMode = mode;
+    this.pacts = [...pacts];
+    this.hyperMode = mode === 'hyper';
+    this.bossRush = mode === 'boss_rush';
+    this.relics.reset();
+    this.arenaEvents.reset();
+    this.ascensionChoice = null;
+    this.pendingAscension = false;
     this.clearWorld();
     if (this.showcase) { this.scene.remove(this.showcase.group); this.showcase = null; }
     const hero = heroById(heroId);
     this.player = new Player(this.scene, hero, getMetaBonuses(), this.projectiles.glyphAtlas);
     this.player.aimMode = loadSettings().aimMode;
+    if (this.hyperMode) {
+      this.player.hyperModeMult = 1.25;
+      this.player.stats = this.player.computeStats();
+    }
+    if (this.hasPact('no_dampeners')) {
+      this.player.noDampeners = true;
+      this.player.dashMax = 3.0;
+    }
     this.world.setTheme(hero.color);
+    this.world.setPenumbraMode(this.hasPact('penumbra'));
+    if (this.hasPact('penumbra')) {
+      this.penumbraLight = new THREE.SpotLight(0xffffff, 55, 45, Math.PI / 3.5, 0.35, 1.2);
+      this.penumbraLight.position.set(0, 12, 0);
+      this.scene.add(this.penumbraLight);
+      this.scene.add(this.penumbraLight.target);
+    }
     this.arenaProps.spawnInitialProps();
     this.totalDamage = 0;
     this.damageBreakdown = {};
-    this.time = 0; this.wave = 1; this.waveTime = 0; this.kills = 0; this.elitesKilled = 0; this.coins = 0; this.shards = 0;
-    this.endless = false; this.bossDefeated = false; this.bossWarning = 0;
-    this.pendingLevels = 0; this.choices = []; this.upgradeLevels = {}; this.result = null;
-    this.spawnTimer = 1.2; this.deathTimer = -1; this.victoryTimer = -1;
-    this.timeScale = 1; this.slowScale = 1; this.slowT = 0; this.chromaV = 0; this.flashV = 0; this.hurtV = 0;
+    this.killsThisRun = {};
+    this.unstableGroundTimer = 2.0;
+    this.time = 0;
+    this.wave = this.bossRush ? 5 : 1;
+    this.waveTime = 0;
+    this.kills = 0;
+    this.elitesKilled = 0;
+    this.coins = 0;
+    this.shards = 0;
+    this.endless = false;
+    this.bossDefeated = false;
+    this.bossWarning = 0;
+    this.pendingLevels = 0;
+    this.choices = [];
+    this.upgradeLevels = {};
+    this.result = null;
+    this.spawnTimer = 1.2;
+    this.deathTimer = -1;
+    this.victoryTimer = -1;
+    this.timeScale = 1;
+    this.slowScale = 1;
+    this.slowT = 0;
+    this.chromaV = 0;
+    this.flashV = 0;
+    this.hurtV = 0;
     this.notices = [];
     this.camera.snap(0, 0);
     this.camera.trauma = 0;
     this.camera.setZoom(1);
     this.setPhase('playing');
-    this.notice('ONDA 1', 'Os Farm\'auras se aproximam', '#00e5ff');
+    if (this.bossRush) {
+      this.startWave(5);
+    } else {
+      this.notice('ONDA 1', 'Os Farm\'auras se aproximam', '#00e5ff');
+    }
     this.audio.startMusic('calm');
     this.flash(0.6, hero.color);
   }
 
   private clearWorld() {
+    if (this.penumbraLight) {
+      this.scene.remove(this.penumbraLight);
+      this.scene.remove(this.penumbraLight.target);
+      this.penumbraLight = null;
+    }
+    this.world.setPenumbraMode(false);
+    if (this.arenaEvents) this.arenaEvents.reset();
     this.enemies.clear();
     this.projectiles.clearAll();
     this.juliaHearts.clear();
@@ -427,10 +503,26 @@ export class Game {
     this.slashes.update(dt);
     this.beams.update(dt);
     this.debris.update(dt);
+    if (this.relics) this.relics.update(dt);
+    if (this.arenaEvents) this.arenaEvents.update(dt, this);
     pl.ghosts.update(dt);
     this.world.update(dt, pl.position, pl.ultActive ? 3 : 1);
     this.updateWaves(dt);
     this.camera.update(realDt, pl.position, pl.vx, this.aimWorld);
+
+    // Spotlight Penumbra
+    if (this.penumbraLight && pl.alive) {
+      this.penumbraLight.position.set(pl.x, 10, pl.z);
+      this.penumbraLight.target.position.set(
+        pl.x + Math.sin(pl.aimAngle) * 14,
+        0.5,
+        pl.z + Math.cos(pl.aimAngle) * 14
+      );
+      this.penumbraLight.target.updateMatrixWorld();
+    }
+
+    const hpFrac = pl.alive ? pl.hp / Math.max(1, pl.stats.maxHp) : 1;
+    this.audio.updateLowHealth(Boolean(pl.alive && hpFrac <= 0.25), realDt);
 
     this.chromaV = Math.max(0, this.chromaV - realDt * 2.2);
     this.flashV = Math.max(0, this.flashV - realDt * 1.8);
@@ -447,6 +539,16 @@ export class Game {
     if (this.victoryTimer > 0) {
       this.victoryTimer -= realDt;
       if (this.victoryTimer <= 0) this.finishRun(true);
+      return;
+    }
+    if (pl.level >= 10 && !pl.ascensionPerk && !this.pendingAscension && this.phase === 'playing') {
+      this.pendingAscension = true;
+    }
+    if (this.pendingAscension && pl.alive && this.phase === 'playing') {
+      this.pendingAscension = false;
+      this.ascensionChoice = ASCENSION_PERKS[this.heroId];
+      this.setPhase('ascension');
+      this.audio.ascension();
       return;
     }
     if (this.pendingLevels > 0 && pl.alive) this.openLevelUp();
@@ -468,8 +570,8 @@ export class Game {
     u.uDesat.value = this.phase === 'paused' || this.phase === 'levelup' ? 0.4 : this.phase === 'gameover' ? 0.6 : 0;
     u.uVignette.value = 0.85 + this.hurtV * 0.7;
     u.uGrain.value = 0.045;
-    const qualityMult = this.graphicsQuality === 'low' ? 0.35 : this.graphicsQuality === 'medium' ? 0.75 : 1.0;
-    this.bloom.strength = (1.1 + this.flashV * 0.7 + (this.phase === 'menu' ? 0.2 : 0)) * qualityMult;
+    const qualityMult = this.graphicsQuality === 'low' ? 0.40 : this.graphicsQuality === 'medium' ? 0.71 : 1.0;
+    this.bloom.strength = (0.45 + this.flashV * 0.35 + (this.phase === 'menu' ? 0.08 : 0)) * qualityMult;
     this.composer.render(realDt);
   }
 
@@ -480,23 +582,60 @@ export class Game {
     if (this.boss && this.boss.state !== 'dead') return;
     if (this.victoryTimer > 0 || this.deathTimer > 0) return;
     this.waveTime += dt;
-    if (this.waveTime >= WAVE_DURATION) this.startWave(this.wave + 1);
+    const waveDur = this.bossRush ? 22 : (this.hyperMode ? WAVE_DURATION * 0.8 : WAVE_DURATION);
+    if (this.bossRush && this.waveTime > 2.0 && this.waveTime < waveDur - 2.5) {
+      const hasLivingMiniboss = this.enemies.list.some(e => e.type === 'miniboss' && !e.dead);
+      if (!hasLivingMiniboss) {
+        this.waveTime = waveDur - 2.5;
+      }
+    }
+    if (this.waveTime >= waveDur) {
+      if (this.bossRush) {
+        if (this.wave === 5) this.startWave(10);
+        else if (this.wave === 10) this.startWave(15);
+        else if (this.wave === 15) this.startWave(20);
+        else this.startWave(this.wave + 5);
+      } else {
+        this.startWave(this.wave + 1);
+      }
+    }
+
+    // Pacto Solo Instável: tremores e fissuras periódicas (independente de framerate)
+    if (this.hasPact('unstable_ground')) {
+      this.unstableGroundTimer -= dt;
+      if (this.unstableGroundTimer <= 0) {
+        this.unstableGroundTimer = rand(2.2, 3.6);
+        const rx = rand(-ARENA_RADIUS + 5, ARENA_RADIUS - 5);
+        const rz = rand(-ARENA_RADIUS + 5, ARENA_RADIUS - 5);
+        this.groundHazards.spawn({
+          x: rx, z: rz,
+          radius: 3.5,
+          duration: 4.0,
+          dps: 18,
+          type: 'fire',
+          color: 0xff3b30,
+          source: 'unstable_ground',
+        });
+        this.shockwaves.spawn(rx, rz, 0xff3b30, { startR: 0.5, endR: 3.5, duration: 0.35 });
+      }
+    }
 
     // Cadência e densidade regular de monstros
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
       const w = this.wave;
-      this.spawnTimer = Math.max(0.14, 0.75 - w * 0.032);
-      const count = 2 + Math.floor(w / 1.8);
+      const speedScale = (this.hyperMode ? 0.75 : 1.0) * (this.hasPact('ferocious_horde') ? 0.8 : 1.0);
+      this.spawnTimer = Math.max(0.12, (0.75 - w * 0.032) * speedScale);
+      const count = (2 + Math.floor(w / 1.8)) * (this.hasPact('ferocious_horde') ? 2 : 1);
       for (let i = 0; i < count; i++) if (this.enemies.count < MAX_ENEMIES) this.spawnEnemy();
     }
 
     // Surto periódico de horda (rushes agressivos)
     this.hordeTimer -= dt;
     if (this.hordeTimer <= 0) {
-      this.hordeTimer = rand(9, 13);
+      this.hordeTimer = rand(9, 13) * (this.hasPact('ferocious_horde') ? 0.75 : 1.0);
       const w = this.wave;
-      const hordeCount = Math.min(28, 8 + Math.floor(w * 1.1));
+      const hordeCount = Math.min(34, (8 + Math.floor(w * 1.1)) * (this.hasPact('ferocious_horde') ? 1.4 : 1.0));
       const pool: EnemyType[] = w >= 12
         ? ['runner', 'kamikaze', 'orbiter', 'shooter', 'shotgunner', 'sniper', 'trapper']
         : w >= 8
@@ -531,6 +670,9 @@ export class Game {
     const newTypes = (Object.keys(ENEMY_DEFS) as EnemyType[]).filter(t => ENEMY_DEFS[t].minWave === n && ENEMY_DEFS[t].weight > 0);
     const sub = n % 5 === 0 ? 'MINI-BOSS DETECTADO' : newTypes.length ? `Novo inimigo: ${ENEMY_DEFS[newTypes[0]].name}` : undefined;
     this.notice(`ONDA ${n}`, sub, n % 5 === 0 ? '#ff4060' : '#00e5ff');
+    if (n > 1 && n !== BOSS_WAVE && (n % 4 === 0 || (this.bossRush && n === 10))) {
+      this.arenaEvents.triggerRandomEvent(this);
+    }
     if (n === 6 || n === 14) {
       const sx = rand(-15, 15);
       const sz = rand(-15, 15);
@@ -774,14 +916,44 @@ export class Game {
     else this.setPhase('playing');
   }
 
+  chooseAscension(perkId: string) {
+    if (this.phase !== 'ascension') return;
+    this.player.applyAscensionPerk(perkId, this);
+    this.ascensionChoice = null;
+    this.pendingAscension = false;
+    this.notice('ASCENSÃO CÓSMICA DESPERTA!', 'Poder estelar atingido!', '#ffd700');
+    if (this.pendingLevels > 0) this.openLevelUp();
+    else this.setPhase('playing');
+  }
+
+  grantRandomRelic(): RelicDef | null {
+    if (!this.relics) return null;
+    const r = this.relics.rollRandomRelic();
+    if (r) {
+      this.relics.add(r.id);
+      this.audio.relicFound();
+      this.notice('RELÍQUIA CÓSMICA ENCONTRADA!', `${r.icon} ${r.name}: ${r.desc}`, r.color);
+      if (this.player) {
+        const hex = parseInt(r.color.replace('#', '0x')) || 0xffd700;
+        this.particles.burst(this.player.x, 1.5, this.player.z, 50, hex, { speed: 10, life: 0.8, size: 0.45 });
+        this.shockwaves.spawn(this.player.x, this.player.z, hex, { endR: 10, duration: 0.5, thick: true });
+      }
+    }
+    return r;
+  }
+
   gainXp(v: number) {
     const pl = this.player;
-    pl.xp += v * pl.stats.xpMult;
+    const hyperXpMult = this.hyperMode ? 1.5 : 1.0;
+    pl.xp += v * pl.stats.xpMult * hyperXpMult;
     while (pl.xp >= pl.xpNext) {
       pl.xp -= pl.xpNext;
       pl.level++;
       pl.xpNext = xpForLevel(pl.level);
       this.pendingLevels++;
+      if (pl.level === 10 && !pl.ascensionPerk) {
+        this.pendingAscension = true;
+      }
     }
   }
 
@@ -791,7 +963,7 @@ export class Game {
   damagePlayer(amount: number, sx = this.player.x, sz = this.player.z + 1) {
     const pl = this.player;
     if (!pl.alive) return;
-    const dealt = pl.takeDamage(amount, sx, sz);
+    const dealt = pl.takeDamage(amount, sx, sz, this);
     if (dealt <= 0) return;
     this.numbers.spawn(pl.x, 1.6, pl.z, dealt, 'player');
     this.hurtV = 1;
@@ -828,8 +1000,17 @@ export class Game {
   }
 
   damageEnemy(e: Enemy, dmg: number, crit: boolean, kind: 'normal' | 'corrode' | 'love' = 'normal'): boolean {
+    if (this.relics) {
+      dmg *= this.relics.getDamageMult(this.player.hp / Math.max(1, this.player.stats.maxHp));
+    }
     const before = Math.max(0, e.hp);
     const killed = this.enemies.damage(e, dmg, this, crit, kind);
+    if (crit && this.relics && this.relics.has('vacuum_reactor') && Math.random() < 0.6) {
+      this.projectiles.spawnMicroVortex(e.x, e.z, this.player.stats.damage);
+    }
+    if (killed && this.relics && this.relics.has('refraction_prism')) {
+      this.projectiles.fireRefractionLasers(e.x, e.z, Math.random() * Math.PI * 2, this.player.stats.damage, this);
+    }
     const ls = this.player?.stats?.lifesteal ?? 0;
     if (ls > 0 && this.player?.alive) {
       this.applyLifesteal(Math.min(dmg, before) * ls);
@@ -931,7 +1112,8 @@ export class Game {
     if (!this.boss) return;
     const s = this.player.stats;
     const crit = Math.random() < s.critChance;
-    const dmg = p.dmg * (crit ? 2 : 1);
+    const relicMult = this.relics ? this.relics.getDamageMult(this.player.hp / Math.max(1, s.maxHp)) : 1;
+    const dmg = p.dmg * (crit ? 2 : 1) * relicMult;
     this.recordDamage(dmg, p.weaponSource || p.kind || 'primary');
     this.boss.hit(dmg, crit, this);
     this.particles.burst(p.x, p.y, p.z, 6, new THREE.Color(p.r, p.g, p.b), { speed: 6, life: 0.3, size: 0.28, gravity: 4 });
@@ -1018,7 +1200,8 @@ export class Game {
     if (!this.boss) return;
     const s = this.player.stats;
     const crit = Math.random() < s.critChance;
-    const dmg = baseDmg * (crit ? 2 : 1);
+    const relicMult = this.relics ? this.relics.getDamageMult(this.player.hp / Math.max(1, s.maxHp)) : 1;
+    const dmg = baseDmg * (crit ? 2 : 1) * relicMult;
     this.recordDamage(dmg, weaponSource);
     this.boss.hit(dmg, crit, this);
     this.applyLifesteal(dmg * s.lifesteal);
@@ -1046,7 +1229,8 @@ export class Game {
     if (!this.boss) return;
     const s = this.player.stats;
     const crit = forceCrit || Math.random() < s.critChance;
-    const dmg = baseDmg * (crit ? 2 : 1);
+    const relicMult = this.relics ? this.relics.getDamageMult(this.player.hp / Math.max(1, s.maxHp)) : 1;
+    const dmg = baseDmg * (crit ? 2 : 1) * relicMult;
     this.recordDamage(dmg, weaponSource);
     this.boss.hit(dmg, crit, this);
     this.applyLifesteal(dmg * s.lifesteal);
@@ -1130,10 +1314,17 @@ export class Game {
   onEnemyKilled(e: Enemy) {
     if (e.type === 'mine') return;
     this.kills++;
+    this.killsThisRun[e.type] = (this.killsThisRun[e.type] ?? 0) + 1;
     this.checkAchievement('first_kill');
     if (e.elite) {
       this.elitesKilled++;
       if (this.elitesKilled >= 8) this.checkAchievement('elite_hunter');
+      if (Math.random() < 0.35) {
+        const relic = this.grantRandomRelic();
+        if (relic) {
+          this.notice('BAÚ DE ELITE ABERTO!', `Relíquia Cósmica: ${relic.name}`, relic.color);
+        }
+      }
     }
     const def = e.def;
     let xp = def.xp * (e.elite ? 3 : 1);
@@ -1143,6 +1334,7 @@ export class Game {
       for (let i = 0; i < 4 + Math.floor(Math.random() * 2); i++) this.pickups.spawn('shard', e.x + rand(-2, 2), e.z + rand(-2, 2), 1);
       for (let i = 0; i < 10; i++) this.pickups.spawn('coin', e.x + rand(-3, 3), e.z + rand(-3, 3), 1);
       this.pickups.spawn('heal', e.x, e.z, 1);
+      this.grantRandomRelic();
       this.notice('SENTINELA DESTRUÍDA', 'Recompensas liberadas', '#ffd700');
     }
     while (xp > 0) {
@@ -1150,8 +1342,9 @@ export class Game {
       this.pickups.spawn('xp', e.x + rand(-0.8, 0.8), e.z + rand(-0.8, 0.8), v);
       xp -= v;
     }
-    if (Math.random() < def.coin * (e.elite ? 3 : 1)) this.pickups.spawn('coin', e.x, e.z, 1);
-    if (e.elite && Math.random() < 0.45) this.pickups.spawn('shard', e.x, e.z, 1);
+    const dropMult = this.relics ? this.relics.getDropsMultiplier() : 1.0;
+    if (Math.random() < def.coin * (e.elite ? 3 : 1) * dropMult) this.pickups.spawn('coin', e.x, e.z, Math.round(1 * dropMult));
+    if (e.elite && Math.random() < 0.45 * dropMult) this.pickups.spawn('shard', e.x, e.z, Math.round(1 * dropMult));
     if (Math.random() < 0.012) this.pickups.spawn('heal', e.x, e.z, 1);
     if (Math.random() < 0.004) this.pickups.spawn('magnet', e.x, e.z, 1);
 
@@ -1213,7 +1406,16 @@ export class Game {
 
   private finishRun(victory: boolean) {
     const pl = this.player;
-    const shardsEarned = this.shards + Math.floor(this.coins / 25);
+    let shardMult = 1.0;
+    if (this.hyperMode) shardMult += 0.5;
+    for (const p of this.pacts) {
+      const pdef = PACTS[p];
+      if (pdef) shardMult += pdef.shardBonus;
+    }
+    if (this.relics && this.relics.has('pact_of_ambition')) {
+      shardMult *= 2.0;
+    }
+    const shardsEarned = Math.round((this.shards + Math.floor(this.coins / 25)) * shardMult);
     const dps = Math.round(this.totalDamage / Math.max(1, this.time));
     const activeWeapons: ActiveWeaponState[] = pl ? pl.getActiveWeapons() : [];
     this.result = {
@@ -1228,8 +1430,14 @@ export class Game {
       dps,
       damageBreakdown: { ...this.damageBreakdown },
       activeWeapons,
+      gameMode: this.gameMode,
+      pacts: [...this.pacts],
+      relics: this.relics ? Array.from(this.relics.activeRelics) : [],
+      ascension: pl ? pl.ascensionPerk : null,
     };
     recordRun({ wave: this.wave, kills: this.kills, shards: shardsEarned, victory });
+    recordMatchHistory(this.result);
+    recordCareerRun(this.result, this.totalDamage, this.killsThisRun);
     this.shards = 0; this.coins = 0;
     this.setPhase(victory ? 'victory' : 'gameover');
   }
@@ -1248,8 +1456,37 @@ export class Game {
     const s = this.screenShocks.find(s => s.age >= 1) ?? this.screenShocks.reduce((a, b) => a.age > b.age ? a : b);
     s.position.set(x, 1, z); s.age = 0; s.power = Math.min(1.5, power);
   }
-  flash(v: number, color = 0xffffff) { this.flashV = Math.max(this.flashV, v); this.flashColor.setHex(color); }
+  flash(v: number, color = 0xffffff) { this.flashV = Math.max(this.flashV, Math.min(0.40, v)); this.flashColor.setHex(color); }
   slowTime(scale: number, dur: number) { this.slowScale = Math.min(this.slowScale, scale); this.slowT = Math.max(this.slowT, dur); }
+
+  getOffscreenThreats(): { angle: number; distance: number; isBoss: boolean; name: string }[] {
+    const list: { angle: number; distance: number; isBoss: boolean; name: string }[] = [];
+    const pl = this.player;
+    if (!pl || !pl.alive) return list;
+    if (this.boss && this.boss.state !== 'dead') {
+      const dx = this.boss.x - pl.x, dz = this.boss.z - pl.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 18) {
+        list.push({ angle: Math.atan2(dx, -dz), distance: Math.round(dist), isBoss: true, name: this.boss.name });
+      }
+    }
+    for (const e of this.enemies.list) {
+      if (e.dead || e.type !== 'miniboss') continue;
+      const dx = e.x - pl.x, dz = e.z - pl.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 18) {
+        list.push({ angle: Math.atan2(dx, -dz), distance: Math.round(dist), isBoss: false, name: "Sentinela Farm'aura" });
+      }
+    }
+    if (this.arenaEvents && this.arenaEvents.thiefAlive) {
+      const dx = this.arenaEvents.thiefX - pl.x, dz = this.arenaEvents.thiefZ - pl.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist > 12) {
+        list.push({ angle: Math.atan2(dx, -dz), distance: Math.round(dist), isBoss: false, name: 'Ladrão de Shards' });
+      }
+    }
+    return list;
+  }
 
   // =====================================================================
   // Snapshot para a HUD
@@ -1288,6 +1525,20 @@ export class Game {
       damageBreakdown: { ...this.damageBreakdown },
       activeWeapons,
       crateAlert,
+      gameMode: this.gameMode,
+      pacts: [...this.pacts],
+      relics: this.relics ? Array.from(this.relics.activeRelics) : [],
+      ascensionPerk: pl ? pl.ascensionPerk : null,
+      ascensionChoice: this.ascensionChoice,
+      activeArenaEvent: this.arenaEvents?.currentEvent ? {
+        type: this.arenaEvents.currentEvent.id,
+        name: this.arenaEvents.currentEvent.name,
+        desc: this.arenaEvents.currentEvent.desc,
+        icon: this.arenaEvents.currentEvent.icon,
+        timer: this.arenaEvents.currentEvent.timer,
+        color: this.arenaEvents.currentEvent.color,
+      } : null,
+      offscreenThreats: this.getOffscreenThreats(),
     };
   }
 
@@ -1473,5 +1724,67 @@ export class Game {
     this.chroma(0.9);
     this.camera.shake(0.35);
     this.juliaHearts.spawnSwarm(this, 16);
+  }
+
+  triggerArenaEventCheat(type: ArenaEventType) {
+    if (!this.arenaEvents) return;
+    this.arenaEvents.triggerEvent(type, this);
+  }
+
+  grantAllRelicsCheat() {
+    if (!this.relics) return;
+    for (const r of ALL_RELIC_IDS) {
+      this.relics.add(r);
+    }
+    this.audio.relicFound();
+    this.notice('TODAS AS 7 RELÍQUIAS ATIVADAS!', undefined, '#ffd700');
+  }
+
+  triggerAscensionCheat() {
+    if (!this.player || !this.player.alive) return;
+    this.ascensionChoice = ASCENSION_PERKS[this.heroId];
+    this.setPhase('ascension');
+    this.audio.ascension();
+    this.notice('CHEAT: ASCENSÃO LIBERADA', 'Escolha seu perk de nível 10', '#ffd700');
+  }
+
+  setGameModeCheat(mode: GameMode) {
+    this.gameMode = mode;
+    this.hyperMode = mode === 'hyper';
+    this.bossRush = mode === 'boss_rush';
+    if (this.player) {
+      this.player.hyperModeMult = this.hyperMode ? 1.25 : 1.0;
+      this.player.stats = this.player.computeStats();
+    }
+    this.notice(`MODO DE JOGO ALTERADO: ${mode.toUpperCase()}`, undefined, '#00e5ff');
+  }
+
+  togglePactCheat(pact: PactId) {
+    const idx = this.pacts.indexOf(pact);
+    if (idx >= 0) {
+      this.pacts.splice(idx, 1);
+      this.notice(`PACTO DESATIVADO: ${PACTS[pact]?.name ?? pact}`, undefined, '#ffaa00');
+    } else {
+      this.pacts.push(pact);
+      this.notice(`PACTO ATIVADO: ${PACTS[pact]?.name ?? pact}`, undefined, '#a855f7');
+    }
+    if (pact === 'penumbra') {
+      const active = this.hasPact('penumbra');
+      this.world.setPenumbraMode(active);
+      if (active && !this.penumbraLight) {
+        this.penumbraLight = new THREE.SpotLight(0xffffff, 55, 45, Math.PI / 3.5, 0.35, 1.2);
+        this.penumbraLight.position.set(0, 12, 0);
+        this.scene.add(this.penumbraLight);
+        this.scene.add(this.penumbraLight.target);
+      } else if (!active && this.penumbraLight) {
+        this.scene.remove(this.penumbraLight);
+        this.scene.remove(this.penumbraLight.target);
+        this.penumbraLight = null;
+      }
+    }
+    if (pact === 'no_dampeners' && this.player) {
+      this.player.noDampeners = this.hasPact('no_dampeners');
+      this.player.dashMax = this.player.noDampeners ? 3.0 : 1.5;
+    }
   }
 }

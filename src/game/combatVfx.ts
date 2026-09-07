@@ -48,19 +48,19 @@ void main() {
     float halo = exp(-r * r * 4.5) * (1.0 - smoothstep(0.65, 1.0, r));
     float rays = pow(max(0.0, 1.0 - abs(p.x * p.y) * 30.0), 5.0) * pow(max(0.0, 1.0 - r), 3.0);
     alpha = (core + halo * 0.18 + rays * 0.3) * fade * 0.7;
-    color = mix(vTint * 1.6, vec3(2.8), core * 0.7);
+    color = mix(vTint * 1.3, vec3(1.7), core * 0.65);
   } else if (kind < 1.5) {
     float n = noise(p * 4.0 + seed + vec2(age * 2.0, -age * 3.0));
     n += noise(p * 9.0 - age * 4.0 + seed) * 0.35;
     float body = 1.0 - smoothstep(0.25, 0.95, r + (n - 0.6) * 0.32);
     float hot = (1.0 - smoothstep(0.05, 0.62, r)) * (1.0 - age);
     alpha = body * fade * 0.32;
-    color = mix(vTint * (1.0 + n), vec3(2.6, 1.9, 1.1), hot * 0.55);
+    color = mix(vTint * (0.9 + n * 0.8), vec3(1.8, 1.4, 0.9), hot * 0.5);
   } else if (kind < 2.5 || kind > 3.5) {
     float edge = 1.0 - smoothstep(0.05, 1.0, abs(p.y));
     float tips = kind > 3.5 ? 1.0 : 1.0 - smoothstep(0.65, 1.0, abs(p.x));
     alpha = edge * edge * tips * fade;
-    color = kind > 3.5 ? vTint * 1.7 : mix(vTint * 2.0, vec3(3.0), pow(edge, 8.0) * 0.65);
+    color = kind > 3.5 ? vTint * 1.3 : mix(vTint * 1.4, vec3(1.8), pow(edge, 8.0) * 0.55);
   } else {
     float n = noise(p * 3.5 + seed + age * 0.6);
     n += noise(p * 8.0 - age + seed) * 0.25;

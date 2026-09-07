@@ -16,6 +16,8 @@ export class AudioEngine {
   private music!: GainNode;
   private noise!: AudioBuffer;
   private delay!: DelayNode;
+  private muffleFilter?: BiquadFilterNode;
+  private heartbeatTimer = 0;
   private lastHit = 0;
   private lastShoot = 0;
   private lastEnemyShot = 0;
@@ -47,9 +49,15 @@ export class AudioEngine {
     comp.attack.value = 0.003;
     comp.release.value = 0.2;
     comp.connect(ctx.destination);
+
+    this.muffleFilter = ctx.createBiquadFilter();
+    this.muffleFilter.type = 'lowpass';
+    this.muffleFilter.frequency.value = 20000;
+    this.muffleFilter.connect(comp);
+
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : this.masterVol;
-    this.master.connect(comp);
+    this.master.connect(this.muffleFilter);
     this.sfx = ctx.createGain();
     this.sfx.gain.value = this.sfxVol;
     this.sfx.connect(this.master);
@@ -300,6 +308,13 @@ export class AudioEngine {
     if (!this.ctx) return;
     const t = this.now;
     this.osc('sawtooth', 880 + Math.random() * 80, 1100, t, 0.08, 0.08, undefined, 3000);
+  }
+
+  laser() {
+    if (!this.ctx) return;
+    const t = this.now;
+    this.osc('sawtooth', 2200, 480, t, 0.1, 0.09, undefined, 4000);
+    this.noiseBurst(t, 0.08, 0.05, 'highpass', 3000, 6000, 1);
   }
 
   teslaArc() {
@@ -554,6 +569,78 @@ export class AudioEngine {
     if (!this.ctx) return;
     const t = this.now;
     this.osc('sine', 700, 1200, t, 0.08, 0.08);
+  }
+
+  updateLowHealth(isLowHp: boolean, dt: number) {
+    if (!this.ctx || !this.muffleFilter) return;
+    const t = this.ctx.currentTime;
+    if (isLowHp) {
+      this.muffleFilter.frequency.setTargetAtTime(650, t, 0.2);
+      this.heartbeatTimer -= dt;
+      if (this.heartbeatTimer <= 0) {
+        this.heartbeatTimer = 0.95;
+        this.heartbeat();
+      }
+    } else {
+      this.muffleFilter.frequency.setTargetAtTime(20000, t, 0.2);
+      this.heartbeatTimer = 0;
+    }
+  }
+
+  private heartbeat() {
+    if (!this.ctx) return;
+    const t = this.now;
+    // Ba-bump tenso
+    this.osc('sine', 75, 35, t, 0.14, 0.45);
+    this.osc('sine', 65, 30, t + 0.16, 0.18, 0.4);
+  }
+
+  flamethrower() {
+    if (!this.ctx) return;
+    const t = this.now;
+    this.noiseBurst(t, 0.08, 0.09, 'bandpass', 1200, 800, 2);
+    this.osc('sawtooth', 80, 50, t, 0.07, 0.05);
+  }
+
+  railgun() {
+    if (!this.ctx) return;
+    const t = this.now;
+    this.osc('sawtooth', 2800, 80, t, 0.4, 0.35, undefined, 4000);
+    this.osc('sine', 160, 40, t, 0.35, 0.5);
+    this.noiseBurst(t, 0.25, 0.25, 'highpass', 1500, 6000, 1);
+  }
+
+  solarInferno() {
+    if (!this.ctx) return;
+    const t = this.now;
+    this.noiseBurst(t, 0.5, 0.3, 'lowpass', 2800, 200, 1);
+    this.osc('sawtooth', 180, 40, t, 0.5, 0.3, undefined, 1200);
+  }
+
+  hadronCollider() {
+    if (!this.ctx) return;
+    const t = this.now;
+    this.osc('sine', 40, 280, t, 0.2, 0.3);
+    this.osc('sawtooth', 600, 30, t + 0.2, 0.4, 0.35, undefined, 2000);
+    this.noiseBurst(t + 0.2, 0.4, 0.3, 'bandpass', 600, 1800, 2);
+  }
+
+  relicFound() {
+    if (!this.ctx) return;
+    const t = this.now;
+    [523.25, 659.25, 783.99, 1046.5, 1318.51].forEach((f, i) => {
+      this.osc('sine', f, f * 1.01, t + i * 0.08, 0.6, 0.16);
+      this.osc('triangle', f * 2, f * 2, t + i * 0.08, 0.4, 0.08);
+    });
+  }
+
+  ascension() {
+    if (!this.ctx) return;
+    const t = this.now;
+    [329.63, 440.0, 554.37, 659.25, 880.0, 1108.73].forEach((f, i) => {
+      this.osc('triangle', f, f, t + i * 0.12, 1.2, 0.22);
+      this.osc('sawtooth', f / 2, f / 2, t + i * 0.12, 0.8, 0.08, undefined, 1800);
+    });
   }
 
   // ---------- Música ----------

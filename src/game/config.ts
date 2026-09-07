@@ -7,8 +7,51 @@ export const MAX_ENEMIES = 220;
 export const PLAYER_RADIUS = 0.9;
 
 export type HeroId = 'big' | 'otton' | 'thiago' | 'pietro' | 'carlinhos' | 'macedo';
-export type GamePhase = 'menu' | 'playing' | 'levelup' | 'paused' | 'gameover' | 'victory';
+export type GamePhase = 'menu' | 'playing' | 'levelup' | 'ascension' | 'paused' | 'gameover' | 'victory';
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+export type GameMode = 'classic' | 'hyper' | 'boss_rush';
+
+export type PactId = 'penumbra' | 'unstable_ground' | 'ferocious_horde' | 'no_dampeners';
+
+export interface PactDef {
+  id: PactId;
+  name: string;
+  desc: string;
+  shardBonus: number;
+  icon: string;
+}
+
+export const PACTS: Record<PactId, PactDef> = {
+  penumbra: {
+    id: 'penumbra',
+    name: 'Penumbra Cósmica',
+    desc: 'Escuridão total na arena: campo de visão restrito com holofote cônico na nave.',
+    shardBonus: 0.25,
+    icon: '🌑',
+  },
+  unstable_ground: {
+    id: 'unstable_ground',
+    name: 'Solo Instável',
+    desc: 'Ondas de choque de lava/plasma percorrem a arena periodicamente.',
+    shardBonus: 0.20,
+    icon: '🌋',
+  },
+  ferocious_horde: {
+    id: 'ferocious_horde',
+    name: 'Horda Feroz',
+    desc: 'Inimigos com +25% de velocidade e deixam poças cáusticas na morte.',
+    shardBonus: 0.30,
+    icon: '🐺',
+  },
+  no_dampeners: {
+    id: 'no_dampeners',
+    name: 'Voo sem Amortecedores',
+    desc: 'Dash com tempo de recarga duplicado, exigindo precisão pura de pilotagem.',
+    shardBonus: 0.25,
+    icon: '🚀',
+  },
+};
 
 export interface HeroDef {
   id: HeroId;
@@ -167,6 +210,8 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'weapon_saw', name: 'Lâminas Orbitais', icon: '⚙', base: 1, max: 1, unit: 'count', desc: () => 'Instala 3 lâminas rotativas de plasma que orbitam a nave cortando inimigos' },
   { id: 'weapon_tesla', name: 'Bobina de Tesla', icon: '⚡', base: 1, max: 1, unit: 'count', desc: () => 'Instala bobina de Tesla que dispara arcos elétricos em cadeia entre monstros' },
   { id: 'weapon_gravity', name: 'Poço Gravitacional', icon: '🌀', base: 1, max: 1, unit: 'count', desc: () => 'Instala emissor de vórtices gravitacionais que sugam e implodem inimigos' },
+  { id: 'weapon_flamethrower', name: 'Lança-Chamas de Plasma', icon: '🔥', base: 1, max: 1, unit: 'count', desc: () => 'Instala lança-chamas contínuo de plasma de curto alcance e alto DPS' },
+  { id: 'weapon_railgun', name: 'Canhão de Trilho Gauss', icon: '⚡', base: 1, max: 1, unit: 'count', desc: () => 'Instala canhão de trilho Gauss cinético de alta perfuração' },
 
   // Dash Especiais - Habilidades de Ativação Única (max: 1)
   { id: 'dash_flame', name: 'Rastro Flamejante', icon: '🔥', base: 1, max: 1, unit: 'count', desc: () => 'O propulsor do Dash incinera a arena deixando rastro contínuo de fogo no solo' },
@@ -368,7 +413,7 @@ export const UPGRADES: UpgradeDef[] = [
   },
 ];
 
-export type SecondaryWeaponId = 'missile_pod' | 'orbital_saw' | 'tesla_coil' | 'gravity_well';
+export type SecondaryWeaponId = 'missile_pod' | 'orbital_saw' | 'tesla_coil' | 'gravity_well' | 'flamethrower' | 'railgun';
 
 export interface SecondaryWeaponDef {
   id: SecondaryWeaponId;
@@ -442,6 +487,34 @@ export const SECONDARY_WEAPONS: Record<SecondaryWeaponId, SecondaryWeaponDef> = 
     evoDesc: 'Domo de colapso quântico que suga a tela inteira e detona em supernova devastadora.',
     evoColor: 0xc084fc,
   },
+  flamethrower: {
+    id: 'flamethrower',
+    name: 'Lança-Chamas de Plasma',
+    icon: '🔥',
+    desc: 'Cone contínuo de fogo de plasma de curto alcance e alto DPS que derrete blindagens.',
+    baseDmg: 16,
+    cooldown: 0.08,
+    color: 0xff4500,
+    pairedUpgrade: 'burn',
+    evoId: 'solar_inferno',
+    evoName: 'Inferno Solar',
+    evoDesc: 'Anel colossal de 360° em volta da nave com labaredas solares devastadoras e dano massivo.',
+    evoColor: 0xff2200,
+  },
+  railgun: {
+    id: 'railgun',
+    name: 'Canhão de Trilho Gauss',
+    icon: '⚡',
+    desc: 'Dispara um feixe cinético perfurante em linha reta infinita que aniquila colunas inimigas.',
+    baseDmg: 85,
+    cooldown: 2.6,
+    color: 0x00ffff,
+    pairedUpgrade: 'crit',
+    evoId: 'hadron_collider',
+    evoName: 'Colisor de Hádrons',
+    evoDesc: 'O feixe abre uma fenda de vácuo no espaço que implode após 0.8s causando dano em linha duplicado.',
+    evoColor: 0x55ffff,
+  },
 };
 
 export interface PrimaryEvolutionDef {
@@ -511,6 +584,126 @@ export const PRIMARY_EVOLUTIONS: Record<HeroId, PrimaryEvolutionDef> = {
   },
 };
 
+export interface AscensionPerkDef {
+  id: string;
+  heroId: HeroId;
+  name: string;
+  title: string;
+  desc: string;
+  icon: string;
+}
+
+export const ASCENSION_PERKS: Record<HeroId, [AscensionPerkDef, AscensionPerkDef]> = {
+  big: [
+    {
+      id: 'big_lightning_interceptor',
+      heroId: 'big',
+      name: 'Interceptador Relâmpago',
+      title: 'Velocidade & Pós-Combustão',
+      desc: '+30% velocidade de voo e pós-combustão contínua que incendeia inimigos ao redor.',
+      icon: '⚡',
+    },
+    {
+      id: 'big_siege_cannoneer',
+      heroId: 'big',
+      name: 'Canhoneiro de Cerco',
+      title: 'Artilharia Pesada de Plasma',
+      desc: 'Tiros primários ganham +100% de dano e causam explosões de plasma ao impacto.',
+      icon: '💥',
+    },
+  ],
+  otton: [
+    {
+      id: 'otton_dimensional_blade',
+      heroId: 'otton',
+      name: 'Lâmina Dimensional',
+      title: 'Vácuo Cortante de Longo Alcance',
+      desc: 'Golpes de karatê disparam lâminas de vácuo cortantes de longo alcance em linha reta.',
+      icon: '⚔',
+    },
+    {
+      id: 'otton_armored_colossus',
+      heroId: 'otton',
+      name: 'Colosso Blindado',
+      title: 'Fortaleza Inabalável',
+      desc: '+120 HP, armadura duplicada e reflete 40% do dano de contato em área.',
+      icon: '🛡',
+    },
+  ],
+  thiago: [
+    {
+      id: 'thiago_caustic_alchemist',
+      heroId: 'thiago',
+      name: 'Alquimista Cáustico',
+      title: 'Regeneração & Persistência Bio-Química',
+      desc: 'Poças de ácido curam a nave quando pisadas e duram o dobro do tempo na arena.',
+      icon: '🧪',
+    },
+    {
+      id: 'thiago_epidemic_vector',
+      heroId: 'thiago',
+      name: 'Vetor Epidêmico',
+      title: 'Contágio Catastrófico',
+      desc: 'Inimigos corroídos explodem ao morrer espalhando veneno com dano triplicado.',
+      icon: '☣',
+    },
+  ],
+  pietro: [
+    {
+      id: 'pietro_esoteric_guardian',
+      heroId: 'pietro',
+      name: 'Guardião Esotérico',
+      title: 'Deflexão Rúnica Permanente',
+      desc: 'Runas giram permanentemente como escudo defletor de tiros e projéteis inimigos.',
+      icon: '🛡',
+    },
+    {
+      id: 'pietro_herald_of_void',
+      heroId: 'pietro',
+      name: 'Arauto do Vácuo',
+      title: 'Cataclismo Astral Prolongado',
+      desc: 'A Suprema dura 10s e faz chover colunas de raios cósmicos contínuos.',
+      icon: '🌌',
+    },
+  ],
+  carlinhos: [
+    {
+      id: 'carlinhos_celestial_harmony',
+      heroId: 'carlinhos',
+      name: 'Harmonia Celestial',
+      title: 'Bênção Protetora',
+      desc: 'Ondas de bondade geram escudos temporários acumuláveis para a nave.',
+      icon: '✨',
+    },
+    {
+      id: 'carlinhos_resonant_love',
+      heroId: 'carlinhos',
+      name: 'Amor Ressonante',
+      title: 'Purificação Ofensiva',
+      desc: 'Ondas causam 150% mais dano e limpam todos os tiros inimigos na tela ao passarem.',
+      icon: '💖',
+    },
+  ],
+  macedo: [
+    {
+      id: 'macedo_telematic_mesh',
+      heroId: 'macedo',
+      name: 'Rede Telemática Mesh',
+      title: 'Conexão Laser Partilhada',
+      desc: 'Armadilhas conectam lasers entre si e transmitem 50% de dano compartilhado.',
+      icon: '🌐',
+    },
+    {
+      id: 'macedo_static_pulsar',
+      heroId: 'macedo',
+      name: 'Pulsar Estático',
+      title: 'Sobrecarga Eletromagnética Dupla',
+      desc: 'Armadilhas disparam pulsos em dobro com atordoamento eletromagnético prolongado.',
+      icon: '⚡',
+    },
+  ],
+};
+
 export type MetaId = 'hp' | 'dmg' | 'speed' | 'magnet' | 'armor' | 'xp' | 'ultcd' | 'luck';
 
 export interface MetaUpgradeDef {
@@ -577,6 +770,10 @@ export interface RunResult {
   dps: number;
   damageBreakdown: Record<string, number>;
   activeWeapons?: ActiveWeaponState[];
+  gameMode?: GameMode;
+  pacts?: PactId[];
+  relics?: string[];
+  ascension?: string | null;
 }
 
 export interface Snapshot {
@@ -613,6 +810,13 @@ export interface Snapshot {
   dps: number;
   damageBreakdown?: Record<string, number>;
   crateAlert?: boolean;
+  gameMode: GameMode;
+  pacts: PactId[];
+  relics: string[];
+  ascensionPerk: string | null;
+  ascensionChoice: [AscensionPerkDef, AscensionPerkDef] | null;
+  activeArenaEvent: { type: string; name: string; desc: string; icon: string; timer: number; color: string } | null;
+  offscreenThreats: { angle: number; distance: number; isBoss: boolean; name: string }[];
 }
 
 export const LORE = [
