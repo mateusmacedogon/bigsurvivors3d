@@ -28,7 +28,7 @@
     "vite": "7.3.2",
     "vite-plugin-singlefile": "2.3.0"
   },
-  "optionalDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.63.1"
+  "allowScripts": {
+    "esbuild": true
   }
 }
