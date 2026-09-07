@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BIG SURVIVOR — Projeto Anti-Aura</title>
+<meta name="description" content="BIG SURVIVOR: Arena survival roguelike contra os Farm'auras alienígenas. Escolha seu herói e sobreviva!">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@400;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a12;color:#e0e0ff;font-family:'Rajdhani',sans-serif;overflow:hidden;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center}
+canvas{display:block;image-rendering:pixelated}
+#ui-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10}
+.screen{position:absolute;top:0;left:0;width:100%;height:100%;display:none;align-items:center;justify-content:center;flex-direction:column;pointer-events:auto}
+.screen.active{display:flex}
+#title-screen{background:radial-gradient(ellipse at center,#0d0d2b 0%,#050510 70%);text-align:center}
+#title-screen h1{font-family:'Orbitron',sans-serif;font-size:4.5em;background:linear-gradient(135deg,#00f0ff,#b000ff,#ff0080);-webkit-background-clip:text;-webkit-text-fill-color:transparent;text-shadow:0 0 40px rgba(0,240,255,.3);margin-bottom:10px;animation:pulseTitle 3s ease-in-out infinite}
+@keyframes pulseTitle{0%,100%{filter:brightness(1)}50%{filter:brightness(1.3)}}
+#title-screen .subtitle{font-size:1.3em;color:#8888cc;margin-bottom:40px;letter-spacing:4px;text-transform:uppercase}
+.btn{font-family:'Orbitron',sans-serif;padding:14px 40px;font-size:1.1em;border:2px solid #00f0ff;background:rgba(0,240,255,.08);color:#00f0ff;cursor:pointer;letter-spacing:2px;transition:all .3s;pointer-events:auto;margin:8px}
+.btn:hover{background:rgba(0,240,255,.25);box-shadow:0 0 25px rgba(0,240,255,.4);transform:scale(1.05)}
+.btn-start{font-size:1.3em;padding:18px 55px;border-color:#b000ff;color:#b000ff;background:rgba(176,0,255,.08)}
+.btn-start:hover{background:rgba(176,0,255,.25);box-shadow:0 0 30px rgba(176,0,255,.4)}
+#lore-screen{background:rgba(5,5,16,.97);padding:40px;overflow-y:auto}
+#lore-screen .lore-text{max-width:700px;font-size:1.15em;line-height:1.8;color:#aaaadd;text-align:center}
+#lore-screen .lore-text span.highlight{color:#00f0ff;font-weight:700}
+#lore-screen .lore-text span.enemy{color:#ff4040;font-weight:700}
+#lore-screen .lore-text span.hero{color:#b000ff;font-weight:700}
+#select-screen{background:radial-gradient(ellipse at center,#0d0d2b 0%,#050510 70%);padding:20px;overflow-y:auto}
+#select-screen h2{font-family:'Orbitron',sans-serif;font-size:2.2em;color:#00f0ff;margin-bottom:20px}
+.char-grid{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;margin-bottom:20px;max-width:1100px}
+.char-card{width:240px;border:2px solid #333;border-radius:12px;padding:16px;background:rgba(20,20,50,.7);cursor:pointer;transition:all .3s;text-align:center}
+.char-card:hover,.char-card.selected{border-color:#00f0ff;box-shadow:0 0 20px rgba(0,240,255,.3);transform:translateY(-4px)}
+.char-card h3{font-family:'Orbitron',sans-serif;font-size:1.2em;color:#e0e0ff;margin:8px 0}
+.char-card .role{color:#b000ff;font-size:.9em;margin-bottom:8px}
+.char-card .stat{color:#8888bb;font-size:.85em;margin:3px 0}
+.char-card .weapon-name{color:#00f0ff;font-weight:700}
+.char-card .ult-name{color:#ff8800;font-weight:700}
+.char-card .char-icon{width:80px;height:80px;border-radius:50%;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:2.5em}
+#meta-screen{background:radial-gradient(ellipse at center,#0d0d2b,#050510);padding:30px;overflow-y:auto}
+#meta-screen h2{font-family:'Orbitron',sans-serif;color:#ffaa00;margin-bottom:15px}
+.meta-grid{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-width:800px;margin-bottom:20px}
+.meta-upgrade{border:1px solid #444;border-radius:8px;padding:12px;width:170px;text-align:center;background:rgba(30,30,60,.6);cursor:pointer;transition:all .3s}
+.meta-upgrade:hover{border-color:#ffaa00;box-shadow:0 0 15px rgba(255,170,0,.2)}
+.meta-upgrade .cost{color:#ffaa00;font-weight:700}
+#gameover-screen{background:rgba(10,0,0,.92);text-align:center}
+#gameover-screen h2{font-family:'Orbitron',sans-serif;font-size:3em;color:#ff2040;margin-bottom:15px}
+#victory-screen{background:rgba(0,10,5,.92);text-align:center}
+#victory-screen h2{font-family:'Orbitron',sans-serif;font-size:3em;color:#00ff80;margin-bottom:15px}
+.stats-box{background:rgba(30,30,60,.5);border:1px solid #444;border-radius:10px;padding:20px;margin:15px;min-width:250px}
+.stats-box div{margin:5px 0;font-size:1.05em}
+#levelup-screen{background:rgba(0,0,20,.88);text-align:center}
+#levelup-screen h2{font-family:'Orbitron',sans-serif;font-size:2.5em;color:#ffdd00;margin-bottom:20px}
+.upgrade-choices{display:flex;gap:15px;flex-wrap:wrap;justify-content:center;max-width:900px}
+.upgrade-card{width:250px;border:2px solid #555;border-radius:10px;padding:18px;background:rgba(25,25,55,.8);cursor:pointer;transition:all .3s;text-align:center}
+.upgrade-card:hover{border-color:#ffdd00;box-shadow:0 0 25px rgba(255,221,0,.3);transform:translateY(-5px)}
+.upgrade-card h3{color:#ffdd00;font-family:'Orbitron',sans-serif;font-size:1em;margin-bottom:8px}
+.upgrade-card p{color:#aaa;font-size:.9em}
+.upgrade-card .rarity-common{color:#aaa}.upgrade-card .rarity-rare{color:#4488ff}.upgrade-card .rarity-epic{color:#bb44ff}.upgrade-card .rarity-legendary{color:#ffaa00}
+#pause-overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,20,.7);display:none;align-items:center;justify-content:center;z-index:20;pointer-events:auto}
+#pause-overlay.active{display:flex}
+#pause-overlay h2{font-family:'Orbitron',sans-serif;font-size:3em;color:#00f0ff}
+</style>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+<div id="ui-layer">
+<div id="title-screen" class="screen active">
+<h1>BIG SURVIVOR</h1>
+<div class="subtitle">Projeto Anti-Aura</div>
+<button class="btn btn-start" onclick="showScreen('lore-screen')">JOGAR</button>
+<button class="btn" onclick="showScreen('meta-screen')">UPGRADES</button>
+</div>
+<div id="lore-screen" class="screen">
+<div class="lore-text">
+<p>Ano <span class="highlight">2026</span>. A Terra foi infiltrada por alienígenas.</p><br>
+<p><span class="hero">Big</span> e seus amigos descobriram que o <span class="enemy">Farmador de Aura</span> da sala era na verdade um espião alienígena, responsável por preparar a invasão.</p><br>
+<p>Antes de ser impedido, o Farmador sequestrou <span class="highlight">Carlinhos</span> e <span class="highlight">Macedo</span> e fugiu para o espaço.</p><br>
+<p><span class="hero">Elon Musk</span>, que já suspeitava de atividade alienígena, iniciou o <span class="highlight">PROJETO ANTI-AURA</span>.</p><br>
+<p>Cada herói recebeu uma <span class="highlight">nave de combate</span> personalizada. Big recebeu a <span class="highlight">Pistola Anti-Aura</span>.</p><br>
+<p>Missão: sobreviver às hordas de <span class="enemy">Farm'auras</span>, encontrar a base inimiga e derrotar o <span class="enemy">Farmador de Aura</span>.</p><br>
+<button class="btn btn-start" onclick="showScreen('select-screen')">ESCOLHER HERÓI →</button>
+</div>
+</div>
+<div id="select-screen" class="screen"><h2>ESCOLHA SEU HERÓI</h2><div class="char-grid" id="char-grid"></div><button class="btn btn-start" id="btn-start-game" onclick="startGame()">INICIAR MISSÃO</button></div>
+<div id="meta-screen" class="screen"><h2>⚡ UPGRADES PERMANENTES</h2><div id="shard-count" style="color:#ffaa00;font-size:1.3em;margin-bottom:15px">Shards: 0</div><div class="meta-grid" id="meta-grid"></div><button class="btn" onclick="showScreen('title-screen')">← VOLTAR</button></div>
+<div id="levelup-screen" class="screen"><h2>⬆ LEVEL UP!</h2><div class="upgrade-choices" id="upgrade-choices"></div></div>
+<div id="gameover-screen" class="screen"><h2>DESTRUÍDO</h2><div id="gameover-stats" class="stats-box"></div><button class="btn btn-start" onclick="showScreen('title-screen')">MENU</button></div>
+<div id="victory-screen" class="screen"><h2>VITÓRIA!</h2><p style="color:#aaa;margin-bottom:10px">O Farmador de Aura foi derrotado!</p><div id="victory-stats" class="stats-box"></div><button class="btn btn-start" onclick="showScreen('title-screen')">MENU</button></div>
+<div id="pause-overlay"><h2>⏸ PAUSADO</h2></div>
+</div>
+<script>
+// ============================================================
+// BIG SURVIVOR — Complete Game
+// ============================================================
+
+// --- CANVAS SETUP ---
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
+function resizeCanvas(){canvas.width=window.innerWidth;canvas.height=window.innerHeight}
+window.addEventListener('resize',resizeCanvas);resizeCanvas();
+
+// --- CONSTANTS ---
+const PI=Math.PI,TAU=PI*2;
+const WORLD_W=4000,WORLD_H=4000;
+const COLORS={
+  bg:'#0a0a18',grid:'#111128',
+  player:'#00eeff',playerGlow:'rgba(0,238,255,.15)',
+  enemy:'#ff3344',enemyGlow:'rgba(255,51,68,.2)',
+  xp:'#44ff88',xpGlow:'rgba(68,255,136,.3)',
+  coin:'#ffcc00',shard:'#ff8800',
+  health:'#ff2244',healthBg:'#331122',
+  shield:'#4488ff',
+  boss:'#ff00aa',bossGlow:'rgba(255,0,170,.3)',
+  neon1:'#00f0ff',neon2:'#b000ff',neon3:'#ff0080',neon4:'#ffaa00'
+};
+
+// --- GAME STATE ---
+let gameState='title'; // title,lore,select,playing,paused,levelup,gameover,victory,meta
+let gameTime=0,deltaTime=0,lastTime=0,runTimer=0;
+let wave=0,waveTimer=0,waveDuration=30,waveTransition=false,waveTransTimer=0;
+let bossSpawned=false,bossDefeated=false;
+let selectedChar=0;
+let shakeAmount=0,shakeDuration=0;
+let runStats={kills:0,damageDealt:0,xpCollected:0,wavesCleared:0,coinsCollected:0,shardsEarned:0};
+
+// --- INPUT ---
+const keys={};
+let mouseX=0,mouseY=0,mouseDown=false,mouseWorld={x:0,y:0};
+window.addEventListener('keydown',e=>{
+  keys[e.key.toLowerCase()]=true;
+  if(e.key.toLowerCase()==='p'&&gameState==='playing'){gameState='paused';document.getElementById('pause-overlay').classList.add('active')}
+  else if(e.key.toLowerCase()==='p'&&gameState==='paused'){gameState='playing';document.getElementById('pause-overlay').classList.remove('active')}
+  if(e.key.toLowerCase()==='q'&&gameState==='playing')activateUltimate();
+  if(e.key==='Escape'&&gameState==='paused'){gameState='playing';document.getElementById('pause-overlay').classList.remove('active')}
+});
+window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+canvas.addEventListener('mousemove',e=>{mouseX=e.clientX;mouseY=e.clientY});
+canvas.addEventListener('mousedown',e=>{if(e.button===0)mouseDown=true});
+canvas.addEventListener('mouseup',e=>{if(e.button===0)mouseDown=false});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+// --- CAMERA ---
+const camera={x:0,y:0};
+function updateCamera(){
+  if(!player)return;
+  camera.x=player.x-canvas.width/2;
+  camera.y=player.y-canvas.height/2;
+  camera.x=Math.max(0,Math.min(WORLD_W-canvas.width,camera.x));
+  camera.y=Math.max(0,Math.min(WORLD_H-canvas.height,camera.y));
+  // screen shake
+  if(shakeDuration>0){
+    camera.x+=Math.random()*shakeAmount*2-shakeAmount;
+    camera.y+=Math.random()*shakeAmount*2-shakeAmount;
+    shakeDuration-=deltaTime;
+  }
+  mouseWorld.x=mouseX+camera.x;
+  mouseWorld.y=mouseY+camera.y;
+}
+function screenShake(amount,dur){shakeAmount=Math.max(shakeAmount,amount);shakeDuration=Math.max(shakeDuration,dur)}
+function worldToScreen(x,y){return{x:x-camera.x,y:y-camera.y}}
+
+// --- UTILITIES ---
+function dist(a,b){return Math.hypot(a.x-b.x,a.y-b.y)}
+function angle(a,b){return Math.atan2(b.y-a.y,b.x-a.x)}
+function lerp(a,b,t){return a+(b-a)*t}
+function clamp(v,mn,mx){return Math.max(mn,Math.min(mx,v))}
+function rand(a,b){return Math.random()*(b-a)+a}
+function randInt(a,b){return Math.floor(rand(a,b+1))}
+function choose(arr){return arr[Math.floor(Math.random()*arr.length)]}
+function chance(p){return Math.random()<p}
+
+// --- PARTICLE SYSTEM ---
+let particles=[];
+function spawnParticle(x,y,opts={}){
+  particles.push({
+    x,y,vx:opts.vx||rand(-1,1),vy:opts.vy||rand(-1,1),
+    life:opts.life||.5,maxLife:opts.life||.5,
+    size:opts.size||3,color:opts.color||'#fff',
+    shrink:opts.shrink!==false,gravity:opts.gravity||0,
+    glow:opts.glow||false
+  });
+}
+function spawnExplosion(x,y,color,count=12,speed=3,size=4){
+  for(let i=0;i<count;i++){
+    const a=rand(0,TAU),s=rand(speed*.3,speed);
+    spawnParticle(x,y,{vx:Math.cos(a)*s,vy:Math.sin(a)*s,color,size:rand(2,size),life:rand(.3,.7),glow:true});
+  }
+}
+function spawnHitParticles(x,y,color='#fff'){
+  for(let i=0;i<6;i++){
+    const a=rand(0,TAU),s=rand(1,3);
+    spawnParticle(x,y,{vx:Math.cos(a)*s,vy:Math.sin(a)*s,color,size:rand(2,4),life:rand(.15,.35)});
+  }
+}
+function updateParticles(dt){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx;p.y+=p.vy;
+    p.vy+=p.gravity;
+    p.vx*=.97;p.vy*=.97;
+    p.life-=dt;
+    if(p.life<=0)particles.splice(i,1);
+  }
+}
+function drawParticles(){
+  for(const p of particles){
+    const s=worldToScreen(p.x,p.y);
+    const alpha=clamp(p.life/p.maxLife,0,1);
+    const sz=p.shrink?p.size*alpha:p.size;
+    ctx.globalAlpha=alpha;
+    if(p.glow){
+      ctx.shadowColor=p.color;ctx.shadowBlur=10;
+    }
+    ctx.fillStyle=p.color;
+    ctx.beginPath();ctx.arc(s.x,s.y,sz,0,TAU);ctx.fill();
+    ctx.shadowBlur=0;
+  }
+  ctx.globalAlpha=1;
+}
+
+// --- DAMAGE NUMBERS ---
+let dmgNumbers=[];
+function spawnDmgNumber(x,y,dmg,color='#fff'){
+  dmgNumbers.push({x,y,text:Math.round(dmg).toString(),color,life:0.8,maxLife:0.8,vy:-2,size:dmg>50?18:dmg>20?15:12});
+}
+function updateDmgNumbers(dt){
+  for(let i=dmgNumbers.length-1;i>=0;i--){
+    const d=dmgNumbers[i];
+    d.y+=d.vy;d.vy*=.96;d.life-=dt;
+    if(d.life<=0)dmgNumbers.splice(i,1);
+  }
+}
+function drawDmgNumbers(){
+  for(const d of dmgNumbers){
+    const s=worldToScreen(d.x,d.y);
+    const alpha=clamp(d.life/d.maxLife,0,1);
+    ctx.globalAlpha=alpha;
+    ctx.font=`bold ${d.size}px Orbitron,sans-serif`;
+    ctx.textAlign='center';
+    ctx.fillStyle='#000';ctx.fillText(d.text,s.x+1,s.y+1);
+    ctx.fillStyle=d.color;ctx.fillText(d.text,s.x,s.y);
+  }
+  ctx.globalAlpha=1;
+}
+
+// --- SCREEN MANAGEMENT ---
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='select-screen')buildCharSelect();
+  if(id==='meta-screen')buildMetaScreen();
+  if(id==='title-screen')gameState='title';
+}
+
+// --- SPRITE LOADING ---
+const sprites={};
+const spriteFiles=['big','otton','thiago','pietro',
+  'farmaura_normal','farmaura_runner','farmaura_tank','farmaura_shooter',
+  'farmaura_sniper','farmaura_shotgunner','farmaura_orbiter','farmaura_mortar',
+  'farmaura_beam','farmaura_summoner','farmaura_mine','farmaura_boss'];
+spriteFiles.forEach(name=>{
+  const img=new Image();
+  img.src=name+'.png';
+  img.onload=()=>{sprites[name]=img};
+});
+
+function drawSprite(name,x,y,w,h,rotation=0){
+  const s=worldToScreen(x,y);
+  ctx.save();
+  ctx.translate(s.x,s.y);
+  if(rotation)ctx.rotate(rotation);
+  if(sprites[name]){
+    ctx.drawImage(sprites[name],-w/2,-h/2,w,h);
+  }
+  ctx.restore();
+}
+
+// --- META PROGRESSION (localStorage) ---
+const META_KEY='bigsurvivor_meta';
+let meta={shards:0,upgrades:{maxHp:0,damage:0,speed:0,magnet:0,armor:0,xpBonus:0,ultCd:0,luck:0}};
+function loadMeta(){try{const d=localStorage.getItem(META_KEY);if(d)meta=JSON.parse(d)}catch(e){}}
+function saveMeta(){try{localStorage.setItem(META_KEY,JSON.stringify(meta))}catch(e){}}
+loadMeta();
+
+const META_UPGRADES=[
+  {id:'maxHp',name:'HP+',desc:'+10 HP máximo',cost:b=>20+b*15,max:20,apply:(p,l)=>{p.maxHp+=l*10;p.hp=p.maxHp}},
+  {id:'damage',name:'Dano+',desc:'+5% dano',cost:b=>25+b*20,max:15,apply:(p,l)=>{p.dmgMult+=l*.05}},
+  {id:'speed',name:'Velocidade+',desc:'+3% velocidade',cost:b=>20+b*15,max:10,apply:(p,l)=>{p.speed*=1+l*.03}},
+  {id:'magnet',name:'Ímã+',desc:'+15 raio magnético',cost:b=>15+b*10,max:10,apply:(p,l)=>{p.magnetRadius+=l*15}},
+  {id:'armor',name:'Armadura+',desc:'+1 armadura',cost:b=>30+b*25,max:10,apply:(p,l)=>{p.armor+=l}},
+  {id:'xpBonus',name:'XP+',desc:'+8% XP bônus',cost:b=>20+b*15,max:10,apply:(p,l)=>{p.xpMult+=l*.08}},
+  {id:'ultCd',name:'Ult Rápida',desc:'-5% cooldown da ult',cost:b=>35+b*25,max:8,apply:(p,l)=>{p.ultCdMult-=l*.05}},
+  {id:'luck',name:'Sorte+',desc:'+5% sorte (melhores drops)',cost:b=>25+b*20,max:10,apply:()=>{}}
+];
+
+function buildMetaScreen(){
+  document.getElementById('shard-count').textContent='Shards: '+meta.shards;
+  const grid=document.getElementById('meta-grid');
+  grid.innerHTML='';
+  META_UPGRADES.forEach(u=>{
+    const lv=meta.upgrades[u.id]||0;
+    const cost=u.cost(lv);
+    const maxed=lv>=u.max;
+    const div=document.createElement('div');
+    div.className='meta-upgrade';
+    div.innerHTML=`<div style="font-size:1.1em;color:#e0e0ff">${u.name}</div>
+      <div style="color:#888;font-size:.85em">${u.desc}</div>
+      <div style="color:#666;margin:4px 0">Nível: ${lv}/${u.max}</div>
+      <div class="cost">${maxed?'MÁXIMO':cost+' shards'}</div>`;
+    if(!maxed)div.onclick=()=>{
+      if(meta.shards>=cost){meta.shards-=cost;meta.upgrades[u.id]=(meta.upgrades[u.id]||0)+1;saveMeta();buildMetaScreen()}
+    };
+    grid.appendChild(div);
+  });
+}

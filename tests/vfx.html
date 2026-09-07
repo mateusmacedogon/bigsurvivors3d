@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<title>Validação de efeitos — BIG SURVIVOR</title>
+<style>
+  body { margin: 0; background: #050911; color: #e2f8ff; font: 14px system-ui; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  nav { position: fixed; top: 16px; left: 16px; background: #091426ec; padding: 16px; border: 1px solid #20445b; border-radius: 12px; }
+  button, select { padding: 9px 12px; margin: 4px; background: #173448; border: 1px solid #3686a3; border-radius: 6px; color: white; cursor: pointer; }
+  output { display: block; white-space: pre-wrap; margin-top: 12px; max-width: 560px; }
+</style>
+<canvas></canvas>
+<nav>
+  <strong>Validação de efeitos • ambiente isolado, sem salvar progresso</strong><br>
+  <button id="explosion">Explosão</button><button id="weapons">Armas e Tesla</button>
+  <button id="stress">Testar limites e limpeza</button><button id="clear">Limpar</button>
+  <button id="advance">Avançar 0,15s</button>
+  <select id="quality" aria-label="Qualidade"><option value="high">Alta</option><option value="medium">Média</option><option value="low">Baixa</option></select>
+  <output id="result">Carregando…</output>
+</nav>
+<script type="module">
+  import * as THREE from 'three';
+  import { CombatVfx } from '/src/game/combatVfx.ts';
+  import { ShockwavePool, SlashPool, DomePool, BeamPool } from '/src/game/effects.ts';
+  import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+  import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+  import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+  import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x050911);
+  const renderer = new THREE.WebGLRenderer({ canvas: document.querySelector('canvas'), antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  const camera = new THREE.PerspectiveCamera(48, innerWidth / innerHeight, 0.1, 150);
+  camera.position.set(0, 21, 25); camera.lookAt(0, 0, 0);
+  scene.add(new THREE.GridHelper(80, 40, 0x24445d, 0x12283a));
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.1, 0.55, 0.6));
+  composer.addPass(new OutputPass());
+  const fx = new CombatVfx(scene), rings = new ShockwavePool(scene), slashes = new SlashPool(scene), domes = new DomePool(scene);
+  const beams = new BeamPool(scene);
+  const result = document.querySelector('#result');
+  const errors = [];
+  renderer.debug.onShaderError = () => errors.push('Falha na compilação de shader');
+  window.addEventListener('error', e => { errors.push(e.message); result.textContent = errors.join('\n'); });
+  const clear = () => { fx.clear(); rings.clear(); slashes.clear(); domes.clear(); beams.clear(); };
+  const step = dt => { fx.update(dt); rings.update(dt); slashes.update(dt); domes.update(dt); beams.update(dt); };
+  let animate = false, age = 0, last = performance.now();
+  function demo(type) {
+    clear(); age = 0; animate = true;
+    if (type === 'explosion') {
+      fx.explosion(0, 1, 0, 0xff8020, 6, 2);
+      rings.spawn(0, 0, 0xffa040, { endR: 11, duration: 0.8, thick: true });
+      domes.spawn(0, 1, 0, 0xff8020, 7, 0.65);
+    } else {
+      beams.acquire(0xff30c0).set(-7, -6, Math.PI / 2, 12, 0.65);
+      fx.lightning(-9, 0, -2, -2, 0x60a5fa);
+      fx.lightning(-2, -2, 4, 0, 0x60a5fa);
+      slashes.spawn(5, 3, 0, 5, 0xff3050);
+      fx.muzzle(-8, 1, 5, Math.PI / 2, 0x00e5ff, 1.5);
+      fx.trail(-7, 1, 5, -2, 1, 5, 0x00e5ff, 1, 'laser');
+      fx.impact(-2, 1, 5, 0x00e5ff, 10, 0, true);
+    }
+    // Freeze a representative frame for visual inspection; repeat via buttons.
+    step(0.075); composer.render(); animate = false;
+    result.textContent = `Prévia: ${type === 'explosion' ? 'explosão em camadas' : 'arcos, raios contínuos e impactos'} • shaders: ${errors.length ? errors.join(', ') : 'OK'}`;
+  }
+  document.querySelector('#explosion').onclick = () => demo('explosion');
+  document.querySelector('#weapons').onclick = () => demo('weapons');
+  document.querySelector('#clear').onclick = () => { clear(); composer.render(); result.textContent = 'Efeitos removidos.'; };
+  document.querySelector('#advance').onclick = () => { for (let i = 0; i < 9; i++) step(1 / 60); composer.render(); };
+  document.querySelector('#quality').onchange = e => { fx.setQuality(e.target.value); demo('explosion'); };
+  document.querySelector('#stress').onclick = () => {
+    animate = false;
+    const checks = [];
+    const assert = (ok, label) => { if (!ok) throw new Error(label); checks.push(`✓ ${label}`); };
+    try {
+      for (const quality of ['high', 'medium', 'low']) {
+        fx.setQuality(quality); clear();
+        for (let frame = 0; frame < 90; frame++) {
+          for (let i = 0; i < 24; i++) {
+            fx.explosion((i % 6 - 3) * 2, 1, (Math.floor(i / 6) - 2) * 2, 0xff8020, 3, 1);
+            rings.spawn(0, 0, 0xff8020); slashes.spawn(0, 0, 0, 4, 0xff3050); domes.spawn(0, 1, 0, 0x8cff2a, 5, 0.7);
+          }
+          step(1 / 60);
+        }
+        const batches = scene.children.filter(o => o.geometry?.isInstancedBufferGeometry);
+        const max = quality === 'high' ? [1600, 180] : quality === 'medium' ? [1040, 117] : [560, 62];
+        assert(batches.length === 2 && batches[0].geometry.instanceCount <= max[0] && batches[1].geometry.instanceCount <= max[1], `${quality}: partículas dentro do limite`);
+        assert(scene.children.length <= 2 + 64 + 24 + 16 + 1 + 10, `${quality}: pools de malhas limitados`);
+        assert(batches.every(b => Array.from(b.geometry.getAttribute('aCenter').array).every(Number.isFinite)), `${quality}: posições válidas`);
+        clear(); step(1 / 60);
+        assert(batches.every(b => b.geometry.instanceCount === 0), `${quality}: reinício sem partículas residuais`);
+      }
+      fx.setQuality('high');
+      fx.explosion(0, 1, 0, 0xff8020, 5); step(2);
+      assert(scene.children.filter(o => o.geometry?.isInstancedBufferGeometry).every(b => b.geometry.instanceCount === 0), 'Efeitos expiram completamente');
+      demo('weapons');
+      assert(errors.length === 0 && renderer.getContext().getError() === 0, 'Shaders compilados e WebGL sem erros');
+      result.textContent = `PASSOU — ${checks.length} verificações\n${checks.join('\n')}`;
+    } catch (error) { result.textContent = `FALHOU: ${error.message}\n${checks.join('\n')}`; }
+  };
+  function frame(now) { const dt = Math.min(0.05, (now - last) / 1000); last = now; if (animate) { age += dt; step(dt); composer.render(); if (age > 2) animate = false; } requestAnimationFrame(frame); }
+  requestAnimationFrame(frame);
+  demo('explosion');
+</script>
+</html>
