@@ -44,6 +44,7 @@ export function makeDigitAtlas(): THREE.CanvasTexture {
 export type NumberKind = 'normal' | 'crit' | 'heal' | 'player' | 'corrode' | 'love';
 
 interface DmgNumber {
+  active: boolean;
   x: number; y: number; z: number;
   vy: number; vx: number;
   life: number; maxLife: number;
@@ -66,9 +67,17 @@ const KIND_COLORS: Record<NumberKind, [number, number, number]> = {
 export class DamageNumbers {
   mesh: THREE.InstancedMesh;
   mode: 'full' | 'crits' | 'off' = 'full';
-  private numbers: DmgNumber[] = [];
-  private maxNumbers = 90;
-  private maxDigits = 480;
+  private pool: DmgNumber[] = Array.from({ length: 120 }, () => ({
+    active: false,
+    x: 0, y: 0, z: 0,
+    vy: 0, vx: 0,
+    life: 0, maxLife: 0,
+    cells: [],
+    r: 1, g: 1, b: 1,
+    scale: 1,
+    kind: 'normal' as NumberKind,
+  }));
+  private maxDigits = 600;
   private colAttr: THREE.InstancedBufferAttribute;
   private alphaAttr: THREE.InstancedBufferAttribute;
   private cellAttr: THREE.InstancedBufferAttribute;
@@ -112,35 +121,54 @@ export class DamageNumbers {
   spawn(x: number, y: number, z: number, value: number, kind: NumberKind = 'normal') {
     if (this.mode === 'off') return;
     if (this.mode === 'crits' && kind !== 'crit' && kind !== 'player') return;
-    if (this.numbers.length >= this.maxNumbers) this.numbers.shift();
+
+    let target: DmgNumber | null = null;
+    let lowestLife = Infinity;
+    let oldestIdx = 0;
+    for (let i = 0; i < this.pool.length; i++) {
+      const p = this.pool[i];
+      if (!p.active) { target = p; break; }
+      if (p.life < lowestLife) { lowestLife = p.life; oldestIdx = i; }
+    }
+    if (!target) target = this.pool[oldestIdx];
+
     const v = Math.round(value);
     let text = String(Math.abs(v));
     if (kind === 'heal') text = '+' + text;
     else if (kind === 'love') text = '♥' + text + '♥';
-    const cells: number[] = [];
-    for (const ch of text) {
-      const idx = CHARS.indexOf(ch);
-      if (idx >= 0) cells.push(idx);
+
+    target.cells.length = 0;
+    for (let i = 0; i < text.length; i++) {
+      const idx = CHARS.indexOf(text[i]);
+      if (idx >= 0) target.cells.push(idx);
     }
+
     const [r, g, b] = KIND_COLORS[kind];
     const life = kind === 'love' ? 1.3 : kind === 'crit' ? 1.1 : 0.8;
-    this.numbers.push({
-      x: x + (Math.random() - 0.5) * 0.6, y: y + 1.2, z: z + (Math.random() - 0.5) * 0.3,
-      vy: 4.5 + Math.random() * 1.5, vx: (Math.random() - 0.5) * 2,
-      life, maxLife: life, cells, r, g, b,
-      scale: kind === 'love' ? 1.7 : kind === 'crit' ? 1.5 : kind === 'player' ? 1.25 : 1,
-      kind,
-    });
+    target.active = true;
+    target.x = x + (Math.random() - 0.5) * 0.6;
+    target.y = y + 1.2;
+    target.z = z + (Math.random() - 0.5) * 0.3;
+    target.vy = 4.5 + Math.random() * 1.5;
+    target.vx = (Math.random() - 0.5) * 2;
+    target.life = life;
+    target.maxLife = life;
+    target.r = r;
+    target.g = g;
+    target.b = b;
+    target.scale = kind === 'love' ? 1.7 : kind === 'crit' ? 1.5 : kind === 'player' ? 1.25 : 1;
+    target.kind = kind;
   }
 
   update(dt: number, camera: THREE.Camera) {
     this.right.set(1, 0, 0).applyQuaternion(camera.quaternion);
     let idx = 0;
-    for (let n = this.numbers.length - 1; n >= 0; n--) {
-      const d = this.numbers[n];
+    for (let n = 0; n < this.pool.length; n++) {
+      const d = this.pool[n];
+      if (!d.active) continue;
       d.life -= dt;
       if (d.life <= 0) {
-        this.numbers.splice(n, 1);
+        d.active = false;
         continue;
       }
       d.vy -= 9 * dt;
@@ -173,7 +201,7 @@ export class DamageNumbers {
   }
 
   clear() {
-    this.numbers.length = 0;
+    for (let i = 0; i < this.pool.length; i++) this.pool[i].active = false;
     this.mesh.count = 0;
   }
 }

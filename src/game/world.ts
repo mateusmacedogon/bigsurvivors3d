@@ -36,6 +36,8 @@ export class World {
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(ARENA_RADIUS * 2 + 40, ARENA_RADIUS * 2 + 40), this.floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.renderOrder = 1;
+    floor.matrixAutoUpdate = false;
+    floor.updateMatrix();
     scene.add(floor);
 
     // Nebulosa
@@ -49,6 +51,8 @@ export class World {
     neb.rotation.x = -Math.PI / 2;
     neb.position.y = -70;
     neb.renderOrder = 0;
+    neb.matrixAutoUpdate = false;
+    neb.updateMatrix();
     scene.add(neb);
 
     // Poeira estelar 3D
@@ -98,6 +102,8 @@ export class World {
     const wall = new THREE.Mesh(new THREE.CylinderGeometry(ARENA_RADIUS, ARENA_RADIUS, 7, 96, 1, true), this.wallMat);
     wall.position.y = 3.5;
     wall.renderOrder = 6;
+    wall.matrixAutoUpdate = false;
+    wall.updateMatrix();
     scene.add(wall);
 
     // Luzes

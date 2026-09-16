@@ -49,15 +49,34 @@ export default function App() {
     if (!canvas) return;
     const game = new Game(canvas);
     gameRef.current = game;
-    game.onPhaseChange = () => setSnap(game.getSnapshot());
-    setSnap(game.getSnapshot());
-    const id = window.setInterval(() => setSnap(game.getSnapshot()), 50);
+    const updateSnapshot = () => {
+      if (gameRef.current) {
+        setSnap(gameRef.current.getSnapshot());
+      }
+    };
+    let timerId = 0;
+    const scheduleNext = () => {
+      if (!gameRef.current) return;
+      updateSnapshot();
+      const interval = gameRef.current.phase === 'playing' ? 50 : 250;
+      timerId = window.setTimeout(scheduleNext, interval);
+    };
+
+    game.onPhaseChange = () => {
+      updateSnapshot();
+      clearTimeout(timerId);
+      const interval = gameRef.current?.phase === 'playing' ? 50 : 250;
+      timerId = window.setTimeout(scheduleNext, interval);
+    };
+    updateSnapshot();
+    timerId = window.setTimeout(scheduleNext, 50);
+
     setReady(true);
     const unlock = () => { game.audio.init(); game.audio.resume(); if (game.phase === 'menu') game.audio.startMusic('calm'); };
     window.addEventListener('pointerdown', unlock, { once: true });
     window.addEventListener('keydown', unlock, { once: true });
     return () => {
-      clearInterval(id);
+      clearTimeout(timerId);
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
       game.destroy();

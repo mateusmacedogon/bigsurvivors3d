@@ -129,6 +129,10 @@ export class Game {
   private aimWorld = new THREE.Vector3(0, 1, 10);
   private raycaster = new THREE.Raycaster();
   private groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1);
+  private _rayHitTarget = new THREE.Vector3();
+  private _tmpColor = new THREE.Color();
+  private _cachedUpgrades: { id: string; name: string; icon: string; level: number }[] = [];
+  private _cachedUpgradesDirty = true;
   private showcase: ShipRig | null = null;
   private showcaseHero: HeroId = 'big';
   private raf = 0;
@@ -326,6 +330,7 @@ export class Game {
     this.pendingLevels = 0;
     this.choices = [];
     this.upgradeLevels = {};
+    this._cachedUpgradesDirty = true;
     this.result = null;
     this.spawnTimer = 1.2;
     this.deathTimer = -1;
@@ -462,7 +467,7 @@ export class Game {
     }
     if (Math.random() < 0.4) {
       const a = Math.random() * Math.PI * 2, r = rand(5, 40);
-      const c = new THREE.Color(heroById(this.showcaseHero).color);
+      const c = this._tmpColor.setHex(heroById(this.showcaseHero).color);
       this.particles.emit(Math.cos(a) * r, 0.3, Math.sin(a) * r, 0, rand(0.5, 2), 0, 3, 0.3, c.r, c.g, c.b, -0.2, 0, 0, 1);
     }
     this.particles.update(dt);
@@ -482,7 +487,7 @@ export class Game {
 
     // mira: raycast no plano do chão
     this.raycaster.setFromCamera(this.input.mouse, this.camera.camera);
-    const hit = this.raycaster.ray.intersectPlane(this.groundPlane, new THREE.Vector3());
+    const hit = this.raycaster.ray.intersectPlane(this.groundPlane, this._rayHitTarget);
     if (hit) this.aimWorld.copy(hit);
 
     pl.update(dt, this, this.input, this.aimWorld);
@@ -901,6 +906,7 @@ export class Game {
     if (!c) return;
     this.player.applyUpgrade(id, c.value);
     this.upgradeLevels[id] = (this.upgradeLevels[id] ?? 0) + 1;
+    this._cachedUpgradesDirty = true;
     if (this.player.secondaryWeapons.size >= 3) this.checkAchievement('arsenal');
     if (this.player.primaryEvolved || Array.from(this.player.secondaryWeapons.values()).some(w => w.evolved)) {
       this.checkAchievement('evolution');
@@ -1526,6 +1532,11 @@ export class Game {
     const activeWeapons: ActiveWeaponState[] = pl ? pl.getActiveWeapons() : [];
     const crateAlert = this.arenaProps ? Boolean(this.arenaProps.supplyDrop?.active) : false;
 
+    if (this._cachedUpgradesDirty) {
+      this._cachedUpgrades = UPGRADES.filter(u => (this.upgradeLevels[u.id] ?? 0) > 0).map(u => ({ id: u.id, name: u.name, icon: u.icon, level: this.upgradeLevels[u.id] }));
+      this._cachedUpgradesDirty = false;
+    }
+
     return {
       phase: this.phase,
       hero: pl ? pl.hero.id : null,
@@ -1539,7 +1550,7 @@ export class Game {
       notice: cur,
       hurt: this.hurtV,
       choices: this.choices,
-      upgrades: UPGRADES.filter(u => (this.upgradeLevels[u.id] ?? 0) > 0).map(u => ({ id: u.id, name: u.name, icon: u.icon, level: this.upgradeLevels[u.id] })),
+      upgrades: this._cachedUpgrades,
       fps: Math.round(this.fps),
       endless: this.endless,
       result: this.result,
@@ -1671,6 +1682,7 @@ export class Game {
         }
       }
     }
+    this._cachedUpgradesDirty = true;
 
     // 4. Restaurar HP e Ult
     pl.hp = pl.stats.maxHp;

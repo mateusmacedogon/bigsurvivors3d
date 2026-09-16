@@ -55,12 +55,17 @@ const neighbors: Enemy[] = [];
 class SpatialHash {
   cell = 4;
   private buckets = new Map<number, Enemy[]>();
+  private usedBuckets: Enemy[][] = [];
   private key(cx: number, cz: number) { return (cx + 4096) * 8192 + (cz + 4096); }
-  clear() { for (const b of this.buckets.values()) b.length = 0; }
+  clear() {
+    for (let i = 0; i < this.usedBuckets.length; i++) this.usedBuckets[i].length = 0;
+    this.usedBuckets.length = 0;
+  }
   insert(e: Enemy) {
     const k = this.key(Math.floor(e.x / this.cell), Math.floor(e.z / this.cell));
     let b = this.buckets.get(k);
     if (!b) { b = []; this.buckets.set(k, b); }
+    if (b.length === 0) this.usedBuckets.push(b);
     b.push(e);
   }
   query(x: number, z: number, r: number, out: Enemy[]) {
@@ -1439,7 +1444,9 @@ export class EnemyManager {
     if (game) {
       for (const e of this.list) {
         if (e.dead || e.type !== 'shielder') continue;
-        for (const o of this.list) {
+        neighbors.length = 0;
+        this.hash.query(e.x, e.z, 12.8, neighbors);
+        for (const o of neighbors) {
           if (linkCount >= 128) break;
           if (o === e || o.dead || o.shield <= 0 || o.type === 'shielder') continue;
           if ((o.x - e.x) ** 2 + (o.z - e.z) ** 2 > 160) continue;

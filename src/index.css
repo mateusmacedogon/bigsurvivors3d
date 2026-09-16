@@ -183,5 +183,48 @@ canvas.game-canvas {
   transition: height 0.1s linear;
 }
 
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-thumb { background: rgba(0, 229, 255, 0.3); border-radius: 4px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: rgba(2, 6, 20, 0.5); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(0, 229, 255, 0.4), rgba(255, 48, 192, 0.35)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: linear-gradient(180deg, rgba(0, 229, 255, 0.75), rgba(255, 48, 192, 0.65)); }
+
+.keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Rajdhani', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.6);
+  color: rgba(255, 255, 255, 0.85);
+  line-height: normal;
+}
+
+.meter-track {
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  position: relative;
+}
+
+.meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.25s ease-out;
+}
+
+@keyframes ready-ping {
+  0% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.9; }
+}
+
+.ready-pulse {
+  animation: ready-ping 1.4s ease-in-out infinite;
+}
