@@ -65,6 +65,16 @@ const WEAPON_LABELS: Record<string, string> = {
   solar_inferno: 'Inferno Solar (Evolução)',
   railgun: 'Canhão Eletromagnético',
   hadron_collider: 'Colisor de Hádrons (Evolução)',
+  mind_awakener: 'O Acordador de Mentes',
+  conspiracy_storm: 'Tempestade Conspiracionista (Raio Gigante)',
+  awakened_singularity: 'O Iluminador Cósmico (Evolução)',
+  wood_oven: 'Forno á Lenha',
+  cosmic_blast_furnace: 'Fornalha Cósmica (Evolução)',
+  breno_companion: 'Breno (Chamas)',
+  breno_explosion: 'Explosão do Breno',
+  infernal_combustion: 'Combustão Espontânea',
+  thunderlord: 'Senhor dos Relâmpagos (Descarga)',
+  pyromancer_trail: 'Trilha de Lava (Piromante)',
 };
 
 function Logo({ small = false }: { small?: boolean }) {
@@ -216,7 +226,7 @@ export function HeroSelect({
         </div>
       </div>
 
-      <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 max-w-[96rem] w-full">
+      <div className="relative grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-8 gap-3.5 max-w-[110rem] w-full">
         {HEROES.map((h, i) => {
           const active = sel === h.id;
           const unlocked = isHeroUnlocked(h.id, meta);

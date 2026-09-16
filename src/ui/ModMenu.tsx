@@ -56,7 +56,7 @@ export function ModMenu({ isOpen, onClose, game, meta, onMetaUpdate, snap }: Mod
     const updated = unlockAllHeroes();
     onMetaUpdate(updated);
     if (game) game.audio.cardPick();
-    showToast('👑 Todos os heróis (Carlinhos & Macedo) desbloqueados!');
+    showToast('👑 Todos os heróis desbloqueados!');
   };
 
   const handleAddShards = (amount: number) => {
@@ -152,15 +152,6 @@ export function ModMenu({ isOpen, onClose, game, meta, onMetaUpdate, snap }: Mod
     }
     game.nukeEnemies();
     showToast('💥 NUKE EXECUTADO! Inimigos eliminados.');
-  };
-
-  const handleJuliaEasterEgg = () => {
-    if (!game) {
-      showToast('⚠️ Jogo não inicializado.');
-      return;
-    }
-    game.triggerJuliaEasterEgg();
-    showToast('💖 Easter Egg Julia Ativado! O Amor Conquista o Cosmos!');
   };
 
   // --- Handlers: Ondas & Chefes ---
@@ -571,24 +562,6 @@ export function ModMenu({ isOpen, onClose, game, meta, onMetaUpdate, snap }: Mod
                   </button>
                 </div>
               </div>
-
-              {/* Easter Egg Julia */}
-              <div className="p-3.5 glass rounded-xl border border-pink-400/40 bg-pink-500/10 space-y-2">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="font-display font-bold text-sm text-pink-300">💖 Easter Egg: Julia</div>
-                    <div className="text-xs text-white/60 mt-0.5">
-                      Invoca a Chuva de Corações Cósmicos 3D que perseguem e aniquilam os inimigos com amor. (Ou digite <span className="font-mono text-pink-300 font-bold">julia</span> no teclado a qualquer momento)
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleJuliaEasterEgg}
-                    className="btn border border-pink-400 bg-pink-500/25 hover:bg-pink-500/45 text-pink-200 text-xs px-4 py-2.5 cursor-pointer shrink-0 transition-all shadow-[0_0_15px_rgba(255,45,117,0.3)]"
-                  >
-                    💖 Disparar
-                  </button>
-                </div>
-              </div>
             </div>
           )}
 
@@ -600,7 +573,7 @@ export function ModMenu({ isOpen, onClose, game, meta, onMetaUpdate, snap }: Mod
                 <div>
                   <div className="font-display font-bold text-sm text-yellow-300">👑 Desbloquear Todos os Personagens</div>
                   <div className="text-xs text-white/60 mt-0.5">
-                    Libera Carlinhos e Macedo instantaneamente para seleção no Hangar.
+                    Libera todos os heróis bloqueados instantaneamente para seleção no Hangar.
                   </div>
                 </div>
                 <button onClick={handleUnlockHeroes} className="btn btn-primary text-xs px-4 py-2 cursor-pointer">

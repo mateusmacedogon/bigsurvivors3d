@@ -6,7 +6,7 @@ export const BOSS_WAVE = 20;
 export const MAX_ENEMIES = 220;
 export const PLAYER_RADIUS = 0.9;
 
-export type HeroId = 'big' | 'otton' | 'thiago' | 'pietro' | 'carlinhos' | 'macedo';
+export type HeroId = 'big' | 'otton' | 'thiago' | 'pietro' | 'carlinhos' | 'macedo' | 'roberto' | 'kaio';
 export type GamePhase = 'menu' | 'playing' | 'levelup' | 'ascension' | 'paused' | 'gameover' | 'victory';
 export type Rarity = 'common' | 'rare' | 'epic' | 'legendary';
 
@@ -123,6 +123,22 @@ export const HEROES: HeroDef[] = [
     ult: 'Surto Comunicativo', ultDesc: 'Sobrecarga de dados global: ondas de choque eletromagnéticas atordoam e causam dano em toda a tela.',
     hp: 115, speed: 14.2, fireRate: 2.5, damage: 22, ultCd: 30,
     locked: true, unlockDesc: 'Derrote o Farmador de Aura e vença uma partida para resgatar!',
+  },
+  {
+    id: 'roberto', name: 'ROBERTO', title: 'Mestre dos Raios',
+    desc: 'Condutor cósmico com domínio elemental da eletricidade. Eletrocuta inimigos em cadeia com tempestades conspiracionistas.',
+    color: 0xffea00, css: '#ffea00',
+    weapon: 'O Acordador de Mentes', weaponDesc: 'Lança raios de energia nos inimigos que saltam velozmente em cadeia entre alvos.',
+    ult: 'Tempestade Conspiracionista', ultDesc: 'Dispara um raio colossal que emana da nave e atinge múltiplos alvos em cadeia devastadora.',
+    hp: 125, speed: 14.0, fireRate: 3.2, damage: 24, ultCd: 34,
+  },
+  {
+    id: 'kaio', name: 'KAIO', title: 'Mestre do Fogo',
+    desc: 'Nave incendiária armada com canhões vulcânicos e propulsores térmicos. Queima inimigos e invoca seu parceiro Breno.',
+    color: 0xff4500, css: '#ff4500',
+    weapon: 'Forno á Lenha', weaponDesc: 'Lança-chamas contínuo que incendeia inimigos e aplica queimadura de alto DPS.',
+    ult: 'Invocação de Breno', ultDesc: 'Invoca o companheiro Breno, que cospe jatos de fogo nos inimigos e depois se autodestrói em grande explosão.',
+    hp: 135, speed: 13.8, fireRate: 8.0, damage: 6.8, ultCd: 36,
   },
 ];
 
@@ -438,6 +454,70 @@ export const UPGRADES: UpgradeDef[] = [
     onlyHero: 'macedo',
     desc: () => '+2 armadilhas simultâneas em campo. Cada armadilha ativa concede +4% de velocidade e dano à nave',
   },
+
+  // ROBERTO
+  {
+    id: 'hero_roberto_overcharge',
+    name: 'Condução Quântica',
+    icon: '⚡',
+    base: 1,
+    max: 1,
+    unit: 'count',
+    onlyHero: 'roberto',
+    desc: () => '+2 saltos na cadeia de raios de \'O Acordador de Mentes\' e +25% de alcance de busca',
+  },
+  {
+    id: 'hero_roberto_thunder_shock',
+    name: 'Eletrochoque Paralisante',
+    icon: '🌩️',
+    base: 1,
+    max: 1,
+    unit: 'count',
+    onlyHero: 'roberto',
+    desc: () => 'Raios atordoam inimigos por 0.8s e causam 30% mais dano a alvos atordoados',
+  },
+  {
+    id: 'hero_roberto_conspiracy_surge',
+    name: 'Surto Conspiracionista',
+    icon: '👁️',
+    base: 1,
+    max: 1,
+    unit: 'count',
+    onlyHero: 'roberto',
+    desc: () => '\'Tempestade Conspiracionista\' dispara 2 raios gigantes extras em leque e recarrega 25% mais rápido',
+  },
+
+  // KAIO
+  {
+    id: 'hero_kaio_blazing_coals',
+    name: 'Brasas Ardentes',
+    icon: '🔥',
+    base: 1,
+    max: 1,
+    unit: 'count',
+    onlyHero: 'kaio',
+    desc: () => '\'Forno á Lenha\' tem +30% de alcance, cone mais amplo e velocidade de queima aumentada',
+  },
+  {
+    id: 'hero_kaio_firestorm_breno',
+    name: 'Fúria de Breno',
+    icon: '💥',
+    base: 1,
+    max: 1,
+    unit: 'count',
+    onlyHero: 'kaio',
+    desc: () => 'Breno cospe fogo com dobro de cadência e o raio e dano da explosão final aumentam em 50%',
+  },
+  {
+    id: 'hero_kaio_infernal_combustion',
+    name: 'Combustão Espontânea',
+    icon: '🌋',
+    base: 1,
+    max: 1,
+    unit: 'count',
+    onlyHero: 'kaio',
+    desc: () => 'Inimigos incendiados explodem em chamas ao morrer, incinerando monstros vizinhos',
+  },
 ];
 
 export type SecondaryWeaponId = 'missile_pod' | 'orbital_saw' | 'tesla_coil' | 'gravity_well' | 'flamethrower' | 'railgun';
@@ -609,6 +689,24 @@ export const PRIMARY_EVOLUTIONS: Record<HeroId, PrimaryEvolutionDef> = {
     icon: '📡',
     color: 0x44ddff,
   },
+  roberto: {
+    heroId: 'roberto',
+    pairedUpgrade: 'damage',
+    evoId: 'awakened_singularity',
+    name: 'O Iluminador Cósmico',
+    desc: 'Raios elétricos hiper-potentes que saltam sem limites entre inimigos liberando micro-tempestades eletrostáticas.',
+    icon: '⚡',
+    color: 0xffff44,
+  },
+  kaio: {
+    heroId: 'kaio',
+    pairedUpgrade: 'area',
+    evoId: 'cosmic_blast_furnace',
+    name: 'Fornalha Cósmica',
+    desc: 'Lança-chamas vulcânico colossal de plasma incandescente em cone massivo que incinera tiros inimigos e derrete qualquer blindagem.',
+    icon: '🔥',
+    color: 0xff3300,
+  },
 };
 
 export interface AscensionPerkDef {
@@ -727,6 +825,42 @@ export const ASCENSION_PERKS: Record<HeroId, [AscensionPerkDef, AscensionPerkDef
       title: 'Sobrecarga Eletromagnética Dupla',
       desc: 'Armadilhas disparam pulsos em dobro com atordoamento eletromagnético prolongado.',
       icon: '⚡',
+    },
+  ],
+  roberto: [
+    {
+      id: 'roberto_thunderlord',
+      heroId: 'roberto',
+      name: 'Senhor dos Relâmpagos',
+      title: 'Condutância Absoluta',
+      desc: 'O Acordador de Mentes tem +4 saltos na cadeia e descargas elétricas periódicas atingem inimigos.',
+      icon: '⚡',
+    },
+    {
+      id: 'roberto_conspiracy_master',
+      heroId: 'roberto',
+      name: 'Mestre da Conspiração',
+      title: 'Cataclismo Elétrico',
+      desc: '\'Tempestade Conspiracionista\' causa o dobro de dano e emite 2 raios gigantes extras.',
+      icon: '👁️',
+    },
+  ],
+  kaio: [
+    {
+      id: 'kaio_pyromancer',
+      heroId: 'kaio',
+      name: 'Piromante Voraz',
+      title: 'Combustão Contínua',
+      desc: 'Forno á Lenha deixa trilha de lava no solo e incinera projéteis inimigos frontais.',
+      icon: '🔥',
+    },
+    {
+      id: 'kaio_breno_brotherhood',
+      heroId: 'kaio',
+      name: 'Irmandade de Breno',
+      title: 'Breno Titânico',
+      desc: 'Breno permanece vivo por 50% mais tempo e sua explosão final atinge o dobro da área.',
+      icon: '🤝',
     },
   ],
 };

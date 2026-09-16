@@ -103,6 +103,8 @@ export function buildShip(hero: HeroId): ShipRig {
     case 'pietro': return buildPietro();
     case 'carlinhos': return buildCarlinhos();
     case 'macedo': return buildMacedo();
+    case 'roberto': return buildRoberto();
+    case 'kaio': return buildKaio();
   }
 }
 
@@ -1093,3 +1095,314 @@ export function buildBottle(): THREE.Group {
 
   return g;
 }
+
+// ---------------------------------------------------------------------------
+// ROBERTO - Interceptador Elétrico Condutor de Relâmpagos
+// ---------------------------------------------------------------------------
+function buildRoberto(): ShipRig {
+  const color = 0xffea00;
+  const accent = 0x80e5ff;
+  const g = new THREE.Group();
+  const hPrimary = hull(0x161b24, 0.92, 0.22);
+  const hSecondary = hull(0x242d3d, 0.88, 0.28);
+  const chromeMat = new THREE.MeshStandardMaterial({ color: 0xb0c4de, metalness: 0.96, roughness: 0.1 });
+  const leds: THREE.MeshBasicMaterial[] = [];
+  const afterburners: THREE.Mesh[] = [];
+
+  const L = (c = color, mult = 3.0) => {
+    const m = led(c, mult);
+    leds.push(m);
+    return m;
+  };
+
+  // 1. Fuselagem Central Facetada - Agulha Elétrica
+  const fuselage = box(0.75, 0.35, 2.6, hPrimary, 0, 0.12, 0);
+  g.add(fuselage);
+  edges(fuselage, color, 1.4);
+
+  // Bico frontal afilado condutor
+  const nose = cone(0.42, 1.3, 6, hSecondary, 0, 0.12, 1.7, Math.PI / 2);
+  g.add(nose);
+  edges(nose, color, 1.5);
+
+  // Ponta do para-raios em liga cromada ultra-condutora
+  const spike = cyl(0.04, 0.08, 0.7, 8, chromeMat, 0, 0.12, 2.4, Math.PI / 2);
+  g.add(spike);
+  spike.add(cyl(0.09, 0.09, 0.12, 8, L(accent, 4.0), 0, 0.35, 0));
+
+  // Canopy de vidro condutor energizado
+  const cockpit = new THREE.Mesh(new THREE.ConeGeometry(0.32, 1.1, 6), glass(color, 0.9));
+  cockpit.rotation.x = Math.PI / 2;
+  cockpit.scale.set(0.9, 1.2, 0.65);
+  cockpit.position.set(0, 0.32, 0.3);
+  g.add(cockpit);
+
+  // Núcleo Gerador Eletrostático Central
+  const coreGroup = new THREE.Group();
+  coreGroup.position.set(0, 0.22, -0.2);
+  g.add(coreGroup);
+
+  const coreOrb = new THREE.Mesh(new THREE.SphereGeometry(0.24, 12, 10), L(color, 3.8));
+  coreGroup.add(coreOrb);
+
+  const ring1 = torus(0.38, 0.03, 6, 20, L(accent, 3.2), 0, 0, 0, Math.PI / 3);
+  coreGroup.add(ring1);
+  const ring2 = torus(0.44, 0.025, 6, 20, L(color, 3.0), 0, 0, 0, -Math.PI / 3);
+  coreGroup.add(ring2);
+
+  // 2. Torres / Bobinas de Descarga Tesla Dianteiras (Muzzles principais)
+  for (const s of [-1, 1]) {
+    const pylon = new THREE.Group();
+    pylon.position.set(s * 0.52, 0.08, 0.8);
+    g.add(pylon);
+
+    // Corpo da bobina
+    const rod = cyl(0.08, 0.1, 1.1, 8, hSecondary, 0, 0, 0, Math.PI / 2);
+    pylon.add(rod);
+
+    // Anéis condensadores de alta tensão
+    for (let r = -0.35; r <= 0.35; r += 0.22) {
+      pylon.add(torus(0.14, 0.028, 6, 12, L(accent, 3.5), 0, 0, r, Math.PI / 2));
+    }
+
+    // Eletrodo de ponta emissor de raio
+    const tip = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), L(color, 4.5));
+    tip.position.set(0, 0, 0.6);
+    pylon.add(tip);
+  }
+
+  // 3. Asas em Flecha com Conduítes Elétricos
+  for (const s of [-1, 1]) {
+    const wing = new THREE.Group();
+    wing.position.set(s * 0.45, 0.06, -0.4);
+    wing.rotation.set(0, s * -0.25, s * 0.08);
+    g.add(wing);
+
+    const wingPlate = box(1.35, 0.06, 1.0, hPrimary, s * 0.65, 0, 0);
+    wing.add(wingPlate);
+    edges(wingPlate, color, 1.3);
+
+    // Trilho neon condutor de raios
+    wing.add(box(1.25, 0.03, 0.05, L(color, 3.2), s * 0.6, 0.035, 0.1));
+
+    // Aletas verticais com descarga corona
+    const fin = box(0.05, 0.65, 0.5, hSecondary, s * 1.35, 0.28, -0.15, 0, 0, s * -0.18);
+    wing.add(fin);
+    fin.add(box(0.06, 0.55, 0.04, L(accent, 3.8), 0, 0, 0.15));
+  }
+
+  // 4. Propulsores Iônicos Traseiros
+  for (const s of [-1, 1]) {
+    const thruster = cyl(0.18, 0.16, 0.8, 8, hSecondary, s * 0.42, 0.12, -1.25, Math.PI / 2);
+    g.add(thruster);
+    thruster.add(cyl(0.15, 0.15, 0.06, 8, L(color, 3.5), 0, 0.42, 0));
+
+    const exhaust = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.85, 8), L(accent, 4.2));
+    exhaust.rotation.x = -Math.PI / 2;
+    exhaust.position.set(s * 0.42, 0.12, -1.8);
+    g.add(exhaust);
+    afterburners.push(exhaust);
+  }
+
+  const ledBase = new THREE.Color(color);
+
+  return {
+    group: g,
+    engines: [new THREE.Vector3(-0.42, 0.12, -1.25), new THREE.Vector3(0.42, 0.12, -1.25)],
+    muzzles: [new THREE.Vector3(-0.52, 0.08, 1.4), new THREE.Vector3(0.52, 0.08, 1.4), new THREE.Vector3(0, 0.12, 2.4)],
+    leds,
+    ledBase,
+    animate: (_dt, s) => {
+      // Rotação dos anéis eletrostáticos do núcleo
+      ring1.rotation.x = s.time * 4.2;
+      ring1.rotation.y = s.time * 3.1;
+      ring2.rotation.y = -s.time * 3.8;
+      ring2.rotation.z = s.time * 2.5;
+
+      const pwr = 2.8 + Math.sin(s.time * 12) * 0.8 + s.firing * 3.0 + (s.ultActive ? 4.5 : 0);
+      for (const m of leds) m.color.copy(ledBase).multiplyScalar(pwr);
+
+      const fScale = 0.85 + (s.speed / 14) * 0.75 + (s.firing > 0 ? 0.35 : 0) + Math.random() * 0.2;
+      for (const b of afterburners) {
+        b.scale.set(1 + Math.random() * 0.2, fScale, 1 + Math.random() * 0.2);
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// KAIO - Belonave Incendiária Vulcânica e Fornalha Cósmica
+// ---------------------------------------------------------------------------
+function buildKaio(): ShipRig {
+  const color = 0xff4500;
+  const accent = 0xffaa00;
+  const g = new THREE.Group();
+  const hPrimary = hull(0x221310, 0.9, 0.28);
+  const hSecondary = hull(0x351a14, 0.85, 0.32);
+  const ironMat = new THREE.MeshStandardMaterial({ color: 0x4a322c, metalness: 0.88, roughness: 0.35 });
+  const leds: THREE.MeshBasicMaterial[] = [];
+  const afterburners: THREE.Mesh[] = [];
+
+  const L = (c = color, mult = 3.0) => {
+    const m = led(c, mult);
+    leds.push(m);
+    return m;
+  };
+
+  // 1. Blindagem Pesada Carbonizada / Fornalha Central
+  const chassis = box(0.95, 0.44, 2.5, hPrimary, 0, 0.15, 0);
+  g.add(chassis);
+  edges(chassis, color, 1.4);
+
+  // Nariz em grelha / chaminé de exaustão térmica
+  const nose = box(0.8, 0.35, 0.9, hSecondary, 0, 0.15, 1.4);
+  g.add(nose);
+  edges(nose, color, 1.5);
+
+  // Grelha frontal de ferro fundido
+  for (let y = 0.05; y <= 0.28; y += 0.07) {
+    nose.add(box(0.7, 0.025, 0.08, L(accent, 3.2), 0, y - 0.15, 0.46));
+  }
+
+  // Canopy de magma reforçado
+  const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.32, 10, 8), glass(0xff3300, 0.92));
+  cockpit.scale.set(0.9, 0.6, 1.4);
+  cockpit.position.set(0, 0.38, 0.2);
+  g.add(cockpit);
+
+  // Escapamentos / Chaminés de Fornalha Superiores
+  for (const s of [-1, 1]) {
+    const stack = cyl(0.1, 0.13, 0.6, 8, ironMat, s * 0.26, 0.45, -0.4, 0.2, 0, s * 0.15);
+    g.add(stack);
+    stack.add(cyl(0.08, 0.08, 0.04, 8, L(accent, 4.0), 0, 0.3, 0));
+  }
+
+  // 2. Bocais Duplos de Lança-Chamas Frontais "Forno á Lenha" (Muzzles principais)
+  for (const s of [-1, 1]) {
+    const burner = new THREE.Group();
+    burner.position.set(s * 0.42, 0.12, 1.45);
+    g.add(burner);
+
+    // Canhão queimador
+    const barrel = cyl(0.14, 0.16, 0.9, 8, ironMat, 0, 0, 0, Math.PI / 2);
+    burner.add(barrel);
+
+    // Bocal incandescente
+    const nozzle = cyl(0.16, 0.14, 0.18, 8, L(color, 4.0), 0, 0, 0.45, Math.PI / 2);
+    burner.add(nozzle);
+
+    // Chama piloto interior
+    const pilotFlame = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.3, 6), L(accent, 4.5));
+    pilotFlame.rotation.x = Math.PI / 2;
+    pilotFlame.position.set(0, 0, 0.6);
+    burner.add(pilotFlame);
+  }
+
+  // 3. Asas Blindadas com Placas Térmicas
+  for (const s of [-1, 1]) {
+    const wing = new THREE.Group();
+    wing.position.set(s * 0.52, 0.08, -0.35);
+    wing.rotation.set(0, s * -0.2, s * 0.06);
+    g.add(wing);
+
+    const wingPlate = box(1.4, 0.08, 1.15, hPrimary, s * 0.7, 0, 0);
+    wing.add(wingPlate);
+    edges(wingPlate, color, 1.3);
+
+    // Conduíte de combustível incandescente
+    wing.add(box(1.3, 0.04, 0.06, L(accent, 3.2), s * 0.65, 0.05, 0.12));
+
+    // Tanque de nafta / plasma lateral
+    const tank = cyl(0.15, 0.15, 0.8, 8, hSecondary, s * 1.45, 0.02, -0.05, Math.PI / 2);
+    wing.add(tank);
+    tank.add(cyl(0.16, 0.16, 0.06, 8, L(color, 3.6), 0, 0.38, 0));
+  }
+
+  // 4. Propulsores Térmicos Traseiros de Combustão Máxima
+  for (const s of [-1, 1]) {
+    const eng = cyl(0.24, 0.2, 0.85, 8, hSecondary, s * 0.45, 0.14, -1.25, Math.PI / 2);
+    g.add(eng);
+    eng.add(cyl(0.22, 0.22, 0.08, 8, L(color, 3.8), 0, 0.42, 0));
+
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.1, 8), L(accent, 4.5));
+    flame.rotation.x = -Math.PI / 2;
+    flame.position.set(s * 0.45, 0.14, -1.9);
+    g.add(flame);
+    afterburners.push(flame);
+  }
+
+  const ledBase = new THREE.Color(color);
+
+  return {
+    group: g,
+    engines: [new THREE.Vector3(-0.45, 0.14, -1.25), new THREE.Vector3(0.45, 0.14, -1.25)],
+    muzzles: [new THREE.Vector3(-0.42, 0.12, 1.8), new THREE.Vector3(0.42, 0.12, 1.8), new THREE.Vector3(0, 0.15, 2.0)],
+    leds,
+    ledBase,
+    animate: (_dt, s) => {
+      const pwr = 2.6 + Math.sin(s.time * 8) * 0.8 + s.firing * 3.5 + (s.ultActive ? 4.0 : 0);
+      for (const m of leds) m.color.copy(ledBase).multiplyScalar(pwr);
+
+      const fScale = 0.9 + (s.speed / 13.8) * 0.8 + (s.firing > 0 ? 0.4 : 0) + Math.random() * 0.25;
+      for (const b of afterburners) {
+        b.scale.set(1 + Math.random() * 0.25, fScale, 1 + Math.random() * 0.25);
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Companheiro Breno - Golem / Drone Flamejante de Suporte
+// ---------------------------------------------------------------------------
+export function buildBrenoMesh(): THREE.Group {
+  const g = new THREE.Group();
+  const color = 0xff3300;
+  const accent = 0xffaa00;
+  const hChassis = hull(0x281612, 0.92, 0.25);
+  const hPlating = hull(0x3d201a, 0.86, 0.3);
+
+  // 1. Núcleo de Plasma Incandescente Central
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 10), led(color, 4.2));
+  g.add(core);
+
+  // Blindagem externa tipo couraça
+  const armor = box(0.68, 0.42, 0.85, hChassis, 0, 0, 0);
+  g.add(armor);
+  edges(armor, color, 1.6);
+
+  // Cabeça / Visor do Breno
+  const visor = box(0.45, 0.16, 0.35, hPlating, 0, 0.22, 0.28);
+  g.add(visor);
+  const eye = box(0.36, 0.06, 0.05, led(accent, 4.5), 0, 0.22, 0.46);
+  g.add(eye);
+
+  // Canhões duplos de fogo nas laterais
+  for (const s of [-1, 1]) {
+    const cannon = cyl(0.09, 0.11, 0.7, 8, hPlating, s * 0.45, -0.05, 0.3, Math.PI / 2);
+    g.add(cannon);
+    const nozzle = cyl(0.12, 0.1, 0.12, 8, led(color, 4.0), s * 0.45, -0.05, 0.65, Math.PI / 2);
+    g.add(nozzle);
+  }
+
+  // Pequenas asas estabilizadoras de chama
+  for (const s of [-1, 1]) {
+    const wing = box(0.4, 0.05, 0.4, hPlating, s * 0.46, 0.08, -0.15, 0, s * 0.25, s * -0.2);
+    g.add(wing);
+    wing.add(box(0.35, 0.03, 0.04, led(accent, 3.5), 0, 0.03, 0.1));
+  }
+
+  // Anel térmico superior / auréola de fogo
+  const halo = torus(0.36, 0.03, 6, 20, led(accent, 3.8), 0, 0.38, 0, Math.PI / 2);
+  g.add(halo);
+
+  // Propulsor de chama inferior
+  const thruster = cyl(0.12, 0.08, 0.3, 8, hChassis, 0, -0.28, -0.2);
+  g.add(thruster);
+  const jet = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.45, 8), led(color, 4.0));
+  jet.rotation.x = Math.PI;
+  jet.position.set(0, -0.5, -0.2);
+  g.add(jet);
+
+  return g;
+}
+

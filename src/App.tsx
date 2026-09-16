@@ -37,9 +37,6 @@ export default function App() {
             }
             return next;
           });
-        } else if (normalized.endsWith('julia')) {
-          keyBuffer = '';
-          gameRef.current?.triggerJuliaEasterEgg();
         }
       }
     };

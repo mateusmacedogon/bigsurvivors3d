@@ -314,7 +314,7 @@ export function HUD({ snap, game }: { snap: Snapshot; game: Game }) {
             <div className={`slot w-[92px] h-[92px] ${ultFrac <= 0 && !snap.ultActive ? 'pulse-glow' : ''}`} style={{ color, borderColor: ultFrac <= 0 ? color : undefined }}>
               <div className="absolute inset-0 flex flex-col items-center justify-center px-1 text-center">
                 <div className="text-3xl">
-                  {snap.hero === 'big' ? '🍾' : snap.hero === 'otton' ? '💗' : snap.hero === 'thiago' ? '☣' : snap.hero === 'pietro' ? '☥' : snap.hero === 'carlinhos' ? '💛' : '📡'}
+                  {snap.hero === 'big' ? '🍾' : snap.hero === 'otton' ? '💗' : snap.hero === 'thiago' ? '☣' : snap.hero === 'pietro' ? '☥' : snap.hero === 'carlinhos' ? '💛' : snap.hero === 'macedo' ? '📡' : snap.hero === 'roberto' ? '⚡' : '🔥'}
                 </div>
                 <div className="font-display text-[9px] tracking-wider text-white/85 leading-tight mt-1">{hero?.ult.toUpperCase()}</div>
                 {ultFrac > 0 && <div className="font-display text-xs mt-0.5" style={{ color }}>{Math.ceil(snap.ultCd)}s</div>}

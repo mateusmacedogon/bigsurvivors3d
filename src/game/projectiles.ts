@@ -459,9 +459,10 @@ export class ProjectileSystem {
           game.hitEnemyWithProjectile(e, p);
           p.hits.push(e.id);
           if (p.kind === 'flame') {
-            const flameBurnDps = p.dmg * (p.weaponSource === 'solar_inferno' ? 1.4 : 0.8);
-            const flameDur = p.weaponSource === 'solar_inferno' ? 5.5 : 3.2;
-            const flameCol = p.weaponSource === 'solar_inferno' ? 0xff2200 : 0xff4500;
+            const isEvo = p.weaponSource === 'solar_inferno' || p.weaponSource === 'cosmic_blast_furnace';
+            const flameBurnDps = p.dmg * (isEvo ? 1.4 : 0.85);
+            const flameDur = isEvo ? 5.5 : (p.weaponSource === 'wood_oven' || p.weaponSource === 'breno_companion' ? 4.0 : 3.2);
+            const flameCol = isEvo ? 0xff2200 : 0xff4500;
             game.enemies.applyBurn(e, flameBurnDps, flameDur, flameCol);
           }
           if (p.weaponSource === 'hadron_collider') {

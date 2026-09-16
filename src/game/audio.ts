@@ -1,4 +1,5 @@
 import type { HeroId } from './config';
+import type { PickupKind } from './pickups';
 
 type MusicMode = 'none' | 'calm' | 'boss';
 
@@ -200,6 +201,13 @@ export class AudioEngine {
         this.osc('square', 1400, 600, t, 0.08, 0.09, undefined, 3500);
         this.osc('sawtooth', 700, 1500, t, 0.06, 0.07);
         break;
+      case 'roberto':
+        this.teslaArc();
+        this.osc('sawtooth', 880, 1760, t, 0.08, 0.09, undefined, 4200);
+        break;
+      case 'kaio':
+        this.flamethrower();
+        break;
     }
   }
 
@@ -249,7 +257,7 @@ export class AudioEngine {
     this.osc('sawtooth', 300 + Math.random() * 100, 40, t, 0.2, 0.08, undefined, 1200);
   }
 
-  pickup(kind: 'xp' | 'coin' | 'shard' | 'heal' | 'magnet') {
+  pickup(kind: PickupKind) {
     if (!this.ctx) return;
     const t = this.now;
     switch (kind) {
@@ -269,6 +277,14 @@ export class AudioEngine {
         break;
       case 'magnet':
         this.osc('sawtooth', 200, 2400, t, 0.4, 0.1, undefined, 3000);
+        break;
+      case 'overdrive':
+      case 'invuln':
+      case 'emp':
+      case 'overcharge':
+      case 'dark_matter':
+        this.osc('sine', 600, 1800, t, 0.3, 0.1);
+        this.osc('triangle', 900, 2200, t + 0.05, 0.25, 0.08);
         break;
     }
   }
@@ -415,6 +431,20 @@ export class AudioEngine {
         for (let i = 0; i < 3; i++) {
           this.osc('square', 160 - i * 30, 60, t + i * 0.18, 0.3, 0.2);
         }
+        break;
+      case 'roberto':
+        this.osc('sawtooth', 120, 2400, t, 0.9, 0.4, undefined, 4500);
+        this.noiseBurst(t, 1.2, 0.35, 'bandpass', 3200, 800, 1.8);
+        for (let i = 0; i < 4; i++) {
+          this.osc('square', 800 + i * 300, 120, t + i * 0.1, 0.3, 0.25, undefined, 5000);
+        }
+        break;
+      case 'kaio':
+        this.noiseBurst(t, 1.4, 0.4, 'lowpass', 1500, 120, 2.5);
+        this.osc('sawtooth', 280, 70, t, 0.8, 0.35, undefined, 1200);
+        [440, 554, 659, 880].forEach((f, i) => {
+          this.osc('square', f, f * 0.5, t + i * 0.08, 0.4, 0.18, undefined, 2400);
+        });
         break;
     }
   }

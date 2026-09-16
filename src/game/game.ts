@@ -1024,9 +1024,9 @@ export class Game {
     const s = this.player.stats;
     if (fromDrone) return;
     const hero = this.player.hero.id;
-    const burnChance = s.burnChance + (hero === 'thiago' ? 0.35 : 0);
+    const burnChance = s.burnChance + (hero === 'thiago' ? 0.35 : 0) + (hero === 'kaio' ? 0.45 : 0);
     if (burnChance > 0 && Math.random() < burnChance) {
-      this.enemies.applyBurn(e, s.damage * (hero === 'thiago' ? 1.2 : 0.7), 3, hero === 'thiago' ? 0x8cff2a : 0xff8020);
+      this.enemies.applyBurn(e, s.damage * (hero === 'thiago' ? 1.2 : 0.85), 3, hero === 'thiago' ? 0x8cff2a : 0xff4500);
     }
     if (s.freezeChance > 0 && Math.random() < s.freezeChance) {
       this.enemies.applyFreeze(e, 1.6);
@@ -1243,10 +1243,10 @@ export class Game {
 
   /** Explosão do jogador (AoE contra inimigos). */
   explodePlayer(x: number, z: number, R: number, dmg: number, color: number, knock: number, big = true, source = 'explosion') {
-    scratch.length = 0;
-    this.enemies.query(x, z, R + 3, scratch);
+    const targets: Enemy[] = [];
+    this.enemies.query(x, z, R + 3, targets);
     const s = this.player.stats;
-    for (const e of scratch) {
+    for (const e of targets) {
       if (e.dead) continue;
       const dx = e.x - x, dz = e.z - z;
       const d = Math.hypot(dx, dz);
@@ -1369,6 +1369,30 @@ export class Game {
       for (const ne of scratch) {
         if (!ne.dead && ne.id !== e.id) {
           this.enemies.applyBurn(ne, this.player.stats.damage * (1.0 + chainLvl * 0.3), 3.5 + chainLvl * 0.5, 0x8cff2a);
+        }
+      }
+    }
+
+    // KAIO: Combustão Espontânea (explosão flamejante ao abater monstros queimando)
+    if (this.heroId === 'kaio' && (this.upgradeLevels['hero_kaio_infernal_combustion'] ?? 0) > 0 && (e.burn > 0 || e.burnDps > 0)) {
+      const combLvl = this.upgradeLevels['hero_kaio_infernal_combustion'] ?? 1;
+      const expR = (3.5 + combLvl * 1.2) * this.player.stats.area;
+      const expDmg = this.player.stats.damage * (1.5 + combLvl * 0.7);
+      this.explodePlayer(e.x, e.z, expR, expDmg, 0xff4500, 14, false, 'infernal_combustion');
+      this.groundHazards.spawn({
+        x: e.x, z: e.z,
+        radius: expR * 0.7,
+        duration: 2.5 + combLvl * 0.5,
+        dps: expDmg * 0.6,
+        type: 'fire',
+        color: 0xff4500,
+        source: 'infernal_combustion',
+      });
+      scratch.length = 0;
+      this.enemies.query(e.x, e.z, expR, scratch);
+      for (const ne of scratch) {
+        if (!ne.dead && ne.id !== e.id) {
+          this.enemies.applyBurn(ne, this.player.stats.damage * (1.2 + combLvl * 0.4), 4.0, 0xff4500);
         }
       }
     }

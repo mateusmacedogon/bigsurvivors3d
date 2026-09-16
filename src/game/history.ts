@@ -53,6 +53,8 @@ const defaultCareer = (): CareerStats => ({
     pietro: 0,
     carlinhos: 0,
     macedo: 0,
+    roberto: 0,
+    kaio: 0,
   },
 });
 

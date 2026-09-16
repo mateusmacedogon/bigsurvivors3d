@@ -5,7 +5,7 @@ import {
 } from './config';
 import type { MetaBonuses } from './save';
 import { updateSetting } from './settings';
-import { buildBottle, buildDroneMesh, buildShip, type ShipRig } from './ships';
+import { buildBottle, buildDroneMesh, buildShip, buildBrenoMesh, type ShipRig } from './ships';
 import { GhostPool, RibbonTrail } from './effects';
 import { SHIELD_FRAG, SHIELD_VERT } from './shaders';
 import { GLYPHS } from './projectiles';
@@ -27,6 +27,17 @@ export interface ActiveSecondaryWeapon {
   level: number;
   timer: number;
   evolved: boolean;
+}
+
+interface BrenoCompanion {
+  group: THREE.Group;
+  x: number;
+  y: number;
+  z: number;
+  life: number;
+  maxLife: number;
+  fireTimer: number;
+  angle: number;
 }
 
 interface MacedoTrap {
@@ -149,8 +160,13 @@ export class Player {
   gladiatorFuryTimer = 0;
   pendingCarlinhosEcho = -1;
   carlinhosDivineTimer = 0;
-  carlinhosDivineStrikes = 0;
+  private carlinhosDivineStrikes = 0;
   pietroGlyphLaserTimer = 0;
+  private robertoStormTimer = 0;
+  private robertoStormTick = 0;
+  private robertoAuraTick = 0;
+  private kaioTrailTick = 0;
+  private brenoCompanion: BrenoCompanion | null = null;
   private roll = 0; private pitch = 0;
   private time = 0;
   meta: MetaBonuses;
@@ -235,6 +251,8 @@ export class Player {
     const rapidSiloReduc = h.id === 'big' ? (u.hero_big_rapid_silo ?? 0) * 0.20 : 0;
     const ottonBleedKnock = h.id === 'otton' && (u.hero_otton_bleeding_strike ?? 0) > 0 ? 1.4 : 1;
     const bigSpeedAsc = this.ascensionPerk === 'big_lightning_interceptor' ? 1.30 : 1.0;
+    const robertoSpeedAsc = this.ascensionPerk === 'roberto_thunderlord' ? 1.20 : 1.0;
+    const robertoUltReduc = h.id === 'roberto' ? (u.hero_roberto_conspiracy_surge ?? 0) * 0.25 : 0;
     const ottonHpAsc = this.ascensionPerk === 'otton_armored_colossus' ? 120 : 0;
     const ottonArmorAsc = this.ascensionPerk === 'otton_armored_colossus' ? 2.0 : 1.0;
 
@@ -259,13 +277,13 @@ export class Player {
 
     return {
       maxHp: h.hp + m.hp + (u.maxhp ?? 0) + ottonHpAsc,
-      speed: h.speed * (1 + effSpeedPct) * this.speedBuffMult * (1 + trapBonus * 0.04) * (1 + furyBonus) * this.hyperModeMult * bigSpeedAsc,
+      speed: h.speed * (1 + effSpeedPct) * this.speedBuffMult * (1 + trapBonus * 0.04) * (1 + furyBonus) * this.hyperModeMult * bigSpeedAsc * robertoSpeedAsc,
       damage: h.damage * (1 + effDmgPct) * (1 + trapBonus * 0.04),
       fireRate: 1 + effFireratePct,
       magnet: 5.5 * (1 + m.magnet + pct('magnet')) * anomalyMagnet,
       armor: (m.armor + (u.armor ?? 0)) * ottonArmorAsc,
       xpMult: 1 + m.xp + pct('xpgain'),
-      ultCd: Math.max(0.3, 1 - m.ultcd - pct('ultcd') - rapidSiloReduc),
+      ultCd: Math.max(0.3, 1 - m.ultcd - pct('ultcd') - rapidSiloReduc - robertoUltReduc),
       luck: m.luck,
       critChance: effCrit,
       lifesteal: effLs,
@@ -792,6 +810,11 @@ export class Player {
     // armadilhas do macedo
     this.updateMacedoTraps(dt, game);
 
+    // companheiro breno (Kaio)
+    if (this.brenoCompanion) {
+      this.updateBrenoCompanion(dt, game);
+    }
+
     // Ascension: Big Interceptador Relâmpago (Pós-Combustão Contínua)
     if (this.ascensionPerk === 'big_lightning_interceptor') {
       this.bigAfterburnerTick -= dt;
@@ -828,6 +851,33 @@ export class Player {
         if (!e.dead) {
           game.damageEnemy(e, s.damage * 0.4 * dt, false, 'normal');
         }
+      }
+    }
+
+    // Ascension: Roberto Senhor dos Relâmpagos (Descargas elétricas periódicas)
+    if (this.ascensionPerk === 'roberto_thunderlord') {
+      this.robertoAuraTick -= dt;
+      if (this.robertoAuraTick <= 0) {
+        this.robertoAuraTick = 1.3;
+        game.projectiles.fireTeslaChain(this.x, this.z, s.damage * 1.5, 4, game, true, 'thunderlord');
+      }
+    }
+
+    // Ascension: Kaio Piromante Voraz (Trilha contínua de lava no solo)
+    if (this.ascensionPerk === 'kaio_pyromancer' && game.groundHazards) {
+      this.kaioTrailTick -= dt;
+      if (this.kaioTrailTick <= 0) {
+        this.kaioTrailTick = 0.2;
+        game.groundHazards.spawn({
+          x: this.x,
+          z: this.z,
+          radius: 2.6,
+          duration: 3.5,
+          dps: s.damage * 0.8,
+          type: 'fire',
+          color: 0xff4500,
+          source: 'pyromancer_trail',
+        });
       }
     }
 
@@ -1046,6 +1096,189 @@ export class Player {
         }
         game.shockwaves.spawn(tx, tz, 0x44ddff, { startR: 0.4, endR: 3.2, duration: 0.25 });
         game.audio.shoot('macedo');
+        break;
+      }
+      case 'roberto': {
+        const evo = this.primaryEvolved;
+        const s = this.stats;
+        const color = evo ? 0xffff55 : 0xffea00;
+        const overchargeLvl = this.upgrades.hero_roberto_overcharge ?? 0;
+        const shockLvl = this.upgrades.hero_roberto_thunder_shock ?? 0;
+        const isThunderlord = this.ascensionPerk === 'roberto_thunderlord';
+
+        this.tmp.copy(this.rig.muzzles[this.muzzleIdx % this.rig.muzzles.length]).applyMatrix4(this.rig.group.matrixWorld);
+        this.muzzleIdx++;
+
+        const maxJumps = (evo ? 8 : 4) + overchargeLvl * 2 + (isThunderlord ? 4 : 0) + Math.floor(s.multishot);
+        const searchDist = (evo ? 24 : 18) * s.projSpeed + overchargeLvl * 4;
+        const jumpRadius = (evo ? 16 : 11) * s.area + overchargeLvl * 3;
+        const baseDmg = s.damage * (evo ? 2.4 : 1.0);
+
+        const enemies = game.enemies;
+        const hitIds = new Set<number>();
+        let firstTarget: Enemy | null = null;
+        let bestScore = -Infinity;
+
+        query.length = 0;
+        enemies.query(this.x, this.z, searchDist, query);
+        for (const e of query) {
+          if (e.dead) continue;
+          const dx = e.x - this.x, dz = e.z - this.z;
+          const d = Math.hypot(dx, dz);
+          if (d > searchDist) continue;
+          const angleToEnemy = Math.atan2(dx, dz);
+          let angleDiff = Math.abs(angleToEnemy - aim);
+          while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - Math.PI * 2);
+          const score = (1.0 - angleDiff / Math.PI) * 2.0 - (d / searchDist);
+          if (score > bestScore) {
+            bestScore = score;
+            firstTarget = e;
+          }
+        }
+
+        let hitBossFirst = false;
+        if (game.boss && game.boss.hittable) {
+          const bdx = game.boss.x - this.x, bdz = game.boss.z - this.z;
+          const bd = Math.hypot(bdx, bdz);
+          if (bd <= searchDist) {
+            const angleToBoss = Math.atan2(bdx, bdz);
+            let angleDiff = Math.abs(angleToBoss - aim);
+            while (angleDiff > Math.PI) angleDiff = Math.abs(angleDiff - Math.PI * 2);
+            const bossScore = (1.0 - angleDiff / Math.PI) * 2.0 - (bd / searchDist);
+            if (bossScore > bestScore || !firstTarget) {
+              hitBossFirst = true;
+            }
+          }
+        }
+
+        let cx = this.tmp.x;
+        let cz = this.tmp.z;
+        let currentDmg = baseDmg;
+
+        if (hitBossFirst && game.boss) {
+          hitIds.add(-1);
+          game.hitBossDirect(currentDmg, evo ? 'awakened_singularity' : 'mind_awakener');
+          game.vfx.lightning(cx, cz, game.boss.x, game.boss.z, color);
+          game.particles.burst(game.boss.x, 1.2, game.boss.z, 14, color, { speed: 8, life: 0.35, size: 0.3 });
+          cx = game.boss.x;
+          cz = game.boss.z;
+          currentDmg *= 0.88;
+        } else if (firstTarget) {
+          hitIds.add(firstTarget.id);
+          const isStunned = firstTarget.stun > 0;
+          const dmgBonus = isStunned && shockLvl > 0 ? 1.3 : 1.0;
+          game.hitEnemyDirect(firstTarget, currentDmg * dmgBonus, evo ? 'awakened_singularity' : 'mind_awakener');
+          firstTarget.stun = Math.max(firstTarget.stun, shockLvl > 0 ? 0.8 : 0.3);
+          game.vfx.lightning(cx, cz, firstTarget.x, firstTarget.z, color);
+          game.particles.burst(firstTarget.x, 1.0, firstTarget.z, 10, color, { speed: 7, life: 0.3, size: 0.3 });
+          cx = firstTarget.x;
+          cz = firstTarget.z;
+          currentDmg *= 0.88;
+        } else {
+          const tx = this.tmp.x + Math.sin(aim) * 16;
+          const tz = this.tmp.z + Math.cos(aim) * 16;
+          game.vfx.lightning(cx, cz, tx, tz, color);
+        }
+
+        if (hitIds.size > 0) {
+          for (let jump = 1; jump < maxJumps; jump++) {
+            query.length = 0;
+            enemies.query(cx, cz, jumpRadius, query);
+            let nextTarget: Enemy | null = null;
+            let nd = Infinity;
+            for (const e of query) {
+              if (e.dead || hitIds.has(e.id)) continue;
+              const d = (e.x - cx) ** 2 + (e.z - cz) ** 2;
+              if (d < nd) {
+                nd = d;
+                nextTarget = e;
+              }
+            }
+
+            let jumpToBoss = false;
+            if (game.boss && game.boss.hittable && !hitIds.has(-1)) {
+              const bd = (game.boss.x - cx) ** 2 + (game.boss.z - cz) ** 2;
+              if (bd < jumpRadius ** 2 && (bd < nd || !nextTarget)) {
+                jumpToBoss = true;
+                nd = bd;
+              }
+            }
+
+            if (jumpToBoss && game.boss) {
+              hitIds.add(-1);
+              game.hitBossDirect(currentDmg, evo ? 'awakened_singularity' : 'mind_awakener');
+              game.vfx.lightning(cx, cz, game.boss.x, game.boss.z, color);
+              game.particles.burst(game.boss.x, 1.2, game.boss.z, 10, color, { speed: 7, life: 0.3, size: 0.3 });
+              cx = game.boss.x;
+              cz = game.boss.z;
+              currentDmg *= 0.88;
+              continue;
+            }
+
+            if (!nextTarget) break;
+
+            hitIds.add(nextTarget.id);
+            const isStunned = nextTarget.stun > 0;
+            const dmgBonus = isStunned && shockLvl > 0 ? 1.3 : 1.0;
+            game.hitEnemyDirect(nextTarget, currentDmg * dmgBonus, evo ? 'awakened_singularity' : 'mind_awakener');
+            nextTarget.stun = Math.max(nextTarget.stun, shockLvl > 0 ? 0.8 : 0.3);
+            game.vfx.lightning(cx, cz, nextTarget.x, nextTarget.z, color);
+            game.particles.burst(nextTarget.x, 1.0, nextTarget.z, 6, color, { speed: 6, life: 0.25, size: 0.25 });
+            if (evo) {
+              game.shockwaves.spawn(nextTarget.x, nextTarget.z, color, { startR: 0.2, endR: 2.2, duration: 0.2 });
+            }
+            cx = nextTarget.x;
+            cz = nextTarget.z;
+            currentDmg *= 0.88;
+          }
+        }
+
+        game.vfx.muzzle(this.tmp.x, this.tmp.y, this.tmp.z, aim, color, 1.3);
+        game.audio.shoot('roberto');
+        break;
+      }
+      case 'kaio': {
+        const evo = this.primaryEvolved;
+        const coalsLvl = this.upgrades.hero_kaio_blazing_coals ?? 0;
+        const isPyromancer = this.ascensionPerk === 'kaio_pyromancer';
+        const color = evo ? 0xff2200 : 0xff4500;
+        const multishot = s.multishot;
+
+        const count = evo ? (10 + Math.floor(multishot * 1.5)) : (3 + multishot);
+        const spread = evo ? 1.5 : (0.48 + coalsLvl * 0.15);
+        const sp = (evo ? 34 : 26) * s.projSpeed * (1 + coalsLvl * 0.15);
+        const startAngle = aim - spread * 0.5;
+
+        this.tmp.copy(this.rig.muzzles[this.muzzleIdx % this.rig.muzzles.length]).applyMatrix4(this.rig.group.matrixWorld);
+        this.muzzleIdx++;
+
+        for (let i = 0; i < count; i++) {
+          const a = count === 1 ? aim : startAngle + (i / (count - 1)) * spread + rand(-0.06, 0.06);
+          const speed = sp * rand(0.9, 1.2);
+          game.projectiles.spawn({
+            kind: 'flame',
+            x: this.tmp.x + Math.sin(a) * 0.5,
+            z: this.tmp.z + Math.cos(a) * 0.5,
+            y: this.tmp.y,
+            vx: Math.sin(a) * speed,
+            vz: Math.cos(a) * speed,
+            dmg: s.damage * (evo ? 2.0 : 1.0),
+            life: rand(0.35, 0.52) * (1 + coalsLvl * 0.2),
+            radius: (evo ? 0.9 : 0.6) * s.area,
+            pierce: 999,
+            color: evo ? 0xff2200 : 0xff4500,
+            scale: (evo ? 1.5 : 1.0) * s.area,
+            trail: 0.7,
+            weaponSource: evo ? 'cosmic_blast_furnace' : 'wood_oven',
+          });
+        }
+
+        if (isPyromancer || evo) {
+          game.projectiles.clearEnemyInRadius(this.x + Math.sin(aim) * 3.5, this.z + Math.cos(aim) * 3.5, 3.2, game);
+        }
+
+        game.vfx.muzzle(this.tmp.x, this.tmp.y, this.tmp.z, aim, color, 1.1);
+        game.audio.shoot('kaio');
         break;
       }
     }
@@ -1458,6 +1691,28 @@ export class Player {
     }
   }
 
+  private renderGiantLightning(x0: number, z0: number, x1: number, z1: number, color: number, game: Game) {
+    game.vfx.segment(x0, 1.2, z0, x1, 1.2, z1, 0xffffff, 1.8, 0.45);
+    game.vfx.segment(x0, 1.2, z0, x1, 1.2, z1, color, 1.2, 0.45);
+    game.vfx.lightning(x0, z0, x1, z1, color);
+    game.vfx.lightning(x0, z0, x1, z1, 0xffffff);
+    const perpX = -(z1 - z0);
+    const perpZ = (x1 - x0);
+    const len = Math.hypot(perpX, perpZ) || 1;
+    const nx = perpX / len;
+    const nz = perpZ / len;
+
+    game.vfx.lightning(x0 + nx * 0.6, z0 + nz * 0.6, x1 + nx * 0.4, z1 + nz * 0.4, color);
+    game.vfx.lightning(x0 - nx * 0.6, z0 - nz * 0.6, x1 - nx * 0.4, z1 - nz * 0.4, 0xffee66);
+    game.vfx.lightning(x0 + nx * 1.2, z0 + nz * 1.2, x1, z1, 0x80e5ff);
+    game.vfx.lightning(x0 - nx * 1.2, z0 - nz * 1.2, x1, z1, color);
+
+    game.shockwaves.spawn(x0, z0, color, { startR: 0.5, endR: 6.0, duration: 0.35 });
+    game.shockwaves.spawn(x1, z1, color, { startR: 0.8, endR: 9.0, duration: 0.45, thick: true });
+    game.particles.burst(x0, 1.2, z0, 20, color, { speed: 8, life: 0.4, size: 0.35 });
+    game.particles.burst(x1, 1.2, z1, 35, 0xffffff, { speed: 12, life: 0.5, size: 0.45 });
+  }
+
   // ---------------------------------------------------------------------
   private tryUlt(game: Game) {
     if (this.ultCd > 0 || this.ultActive) return;
@@ -1576,6 +1831,187 @@ export class Player {
           }
         }
         game.notice('SURTO COMUNICATIVO!', 'SOBRECARGA ELETROMAGNÉTICA GLOBAL', '#44ddff');
+        break;
+      }
+      case 'roberto': {
+        const surgeLvl = this.upgrades.hero_roberto_conspiracy_surge ?? 0;
+        const isMaster = this.ascensionPerk === 'roberto_conspiracy_master';
+        const color = 0xffea00;
+        const ultDmg = s.damage * (10 + surgeLvl * 3) * (isMaster ? 2.0 : 1.0);
+        const maxChainTargets = 16 + surgeLvl * 6;
+
+        this.robertoStormTimer = 3.5;
+        this.robertoStormTick = 0.15;
+        this.ultActive = true;
+        game.audio.ult('roberto');
+
+        game.lights.flash(this.x, 5, this.z, 0xffff66, 3500, 1.5, 90);
+        game.camera.shake(0.85);
+        game.flash(0.75, 0xffea00);
+        game.chroma(2.0);
+
+        game.shockwaves.spawn(this.x, this.z, 0xffea00, { startR: 2, endR: 45, duration: 0.9, thick: true, intensity: 5 });
+        game.domes.spawn(this.x, 1.5, this.z, 0xffea44, 40, 0.9);
+
+        // Raio gigante saindo do personagem que atinge vários inimigos em cadeia
+        const extraBeams = (surgeLvl > 0 ? 2 : 0) + (isMaster ? 2 : 0);
+        const beamCount = 1 + extraBeams;
+        let beamAngles: number[];
+        if (beamCount === 1) {
+          beamAngles = [this.aimAngle];
+        } else if (beamCount === 3) {
+          beamAngles = [this.aimAngle - 0.35, this.aimAngle, this.aimAngle + 0.35];
+        } else {
+          beamAngles = [this.aimAngle - 0.5, this.aimAngle - 0.25, this.aimAngle, this.aimAngle + 0.25, this.aimAngle + 0.5];
+        }
+
+        const chainedIds = new Set<number>();
+
+        for (const beamAngle of beamAngles) {
+          const cx = this.x;
+          const cz = this.z;
+
+          // Encontrar alvo primário para o feixe de raio gigante
+          query.length = 0;
+          game.enemies.query(this.x, this.z, 38, query);
+          let leadEnemy: Enemy | null = null;
+          let bestScore = -Infinity;
+
+          for (const e of query) {
+            if (e.dead || chainedIds.has(e.id)) continue;
+            const dx = e.x - this.x, dz = e.z - this.z;
+            const d = Math.hypot(dx, dz);
+            if (d > 38) continue;
+            const a = Math.atan2(dx, dz);
+            let diff = Math.abs(a - beamAngle);
+            while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+            const score = (1.0 - diff / Math.PI) * 3.0 - (d / 38);
+            if (score > bestScore) {
+              bestScore = score;
+              leadEnemy = e;
+            }
+          }
+
+          let leadBoss = false;
+          if (game.boss && game.boss.hittable && !chainedIds.has(-1)) {
+            const bdx = game.boss.x - this.x, bdz = game.boss.z - this.z;
+            const bd = Math.hypot(bdx, bdz);
+            if (bd <= 38) {
+              const a = Math.atan2(bdx, bdz);
+              let diff = Math.abs(a - beamAngle);
+              while (diff > Math.PI) diff = Math.abs(diff - Math.PI * 2);
+              const bossScore = (1.0 - diff / Math.PI) * 3.0 - (bd / 38);
+              if (bossScore > bestScore || !leadEnemy) {
+                leadBoss = true;
+                leadEnemy = null;
+              }
+            }
+          }
+
+          let targetX = 0, targetZ = 0;
+          if (leadBoss && game.boss) {
+            chainedIds.add(-1);
+            targetX = game.boss.x;
+            targetZ = game.boss.z;
+            game.hitBossDirect(ultDmg * 1.5, 'conspiracy_storm', true);
+            game.particles.burst(targetX, 1.5, targetZ, 40, color, { speed: 16, life: 0.6, size: 0.5 });
+          } else if (leadEnemy) {
+            chainedIds.add(leadEnemy.id);
+            targetX = leadEnemy.x;
+            targetZ = leadEnemy.z;
+            game.hitEnemyDirect(leadEnemy, ultDmg, 'conspiracy_storm', true);
+            leadEnemy.stun = Math.max(leadEnemy.stun, 3.5);
+            game.particles.burst(targetX, 1.5, targetZ, 30, color, { speed: 14, life: 0.6, size: 0.5 });
+          } else {
+            targetX = this.x + Math.sin(beamAngle) * 32;
+            targetZ = this.z + Math.cos(beamAngle) * 32;
+          }
+
+          this.renderGiantLightning(cx, cz, targetX, targetZ, color, game);
+
+          let currentX = targetX;
+          let currentZ = targetZ;
+          let chainDmg = ultDmg * 0.85;
+
+          for (let step = 0; step < maxChainTargets; step++) {
+            query.length = 0;
+            game.enemies.query(currentX, currentZ, 18 * s.area, query);
+            let next: Enemy | null = null;
+            let nd = Infinity;
+            for (const e of query) {
+              if (e.dead || chainedIds.has(e.id)) continue;
+              const d = (e.x - currentX) ** 2 + (e.z - currentZ) ** 2;
+              if (d < nd) {
+                nd = d;
+                next = e;
+              }
+            }
+
+            let chainToBoss = false;
+            if (game.boss && game.boss.hittable && !chainedIds.has(-1)) {
+              const bd = (game.boss.x - currentX) ** 2 + (game.boss.z - currentZ) ** 2;
+              if (bd < (18 * s.area) ** 2 && (bd < nd || !next)) {
+                chainToBoss = true;
+                nd = bd;
+              }
+            }
+
+            if (chainToBoss && game.boss) {
+              chainedIds.add(-1);
+              game.hitBossDirect(chainDmg * 1.3, 'conspiracy_storm', true);
+              game.vfx.lightning(currentX, currentZ, game.boss.x, game.boss.z, color);
+              game.vfx.lightning(currentX, currentZ, game.boss.x, game.boss.z, 0xffffff);
+              game.particles.burst(game.boss.x, 1.5, game.boss.z, 20, color, { speed: 10, life: 0.4, size: 0.4 });
+              currentX = game.boss.x;
+              currentZ = game.boss.z;
+              chainDmg *= 0.92;
+              continue;
+            }
+
+            if (!next) break;
+
+            chainedIds.add(next.id);
+            game.vfx.lightning(currentX, currentZ, next.x, next.z, color);
+            game.hitEnemyDirect(next, chainDmg, 'conspiracy_storm', true);
+            next.stun = Math.max(next.stun, 3.0);
+            game.particles.burst(next.x, 1.0, next.z, 16, color, { speed: 10, life: 0.4, size: 0.4 });
+            currentX = next.x;
+            currentZ = next.z;
+            chainDmg *= 0.92;
+          }
+        }
+
+        game.notice('TEMPESTADE CONSPIRACIONISTA!', 'RAIO GIGANTE EM CADEIA TOTAL', '#ffea00');
+        break;
+      }
+      case 'kaio': {
+        const brenoLvl = this.upgrades.hero_kaio_firestorm_breno ?? 0;
+        const isBrotherhood = this.ascensionPerk === 'kaio_breno_brotherhood';
+        const life = (isBrotherhood ? 15 : 10) + brenoLvl * 2;
+        if (this.brenoCompanion) {
+          this.explodeBreno(game);
+        }
+        const brenoMesh = buildBrenoMesh();
+        const startX = this.x + Math.sin(this.aimAngle + Math.PI * 0.5) * 2.5;
+        const startZ = this.z + Math.cos(this.aimAngle + Math.PI * 0.5) * 2.5;
+        brenoMesh.position.set(startX, 1.8, startZ);
+        this.scene.add(brenoMesh);
+        this.brenoCompanion = {
+          group: brenoMesh,
+          x: startX,
+          y: 1.8,
+          z: startZ,
+          life,
+          maxLife: life,
+          fireTimer: 0.1,
+          angle: this.aimAngle,
+        };
+        this.ultActive = true;
+        game.audio.ult('kaio');
+        game.shockwaves.spawn(startX, startZ, 0xff4500, { startR: 1, endR: 12, duration: 0.5, thick: true, intensity: 4 });
+        game.particles.burst(startX, 1.8, startZ, 80, 0xff4500, { speed: 12, life: 0.6, size: 0.45 });
+        game.vfx.explosion(startX, 1.8, startZ, 0xff5500, 6, 2);
+        game.notice('INVOCAÇÃO DE BRENO!', 'Breno entrou na batalha com fúria incendiária!', '#ff4500');
         break;
       }
     }
@@ -1837,6 +2273,177 @@ export class Player {
         game.particles.burst(this.x, 1.5, this.z, 60, 0x44ddff, { speed: 10, life: 0.8, size: 0.4 });
       }
     }
+
+    // ROBERTO: Tempestade Conspiracionista (arcos elétricos celestes contínuos)
+    if (this.hero.id === 'roberto' && this.robertoStormTimer > 0) {
+      this.robertoStormTimer -= dt;
+      this.robertoStormTick -= dt;
+      if (this.robertoStormTick <= 0) {
+        this.robertoStormTick = 0.22;
+        query.length = 0;
+        game.enemies.query(this.x, this.z, 28, query);
+        const aliveEnemies = query.filter(e => !e.dead);
+        if (aliveEnemies.length > 0) {
+          const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+          const strikeDmg = s.damage * 2.5;
+          game.hitEnemyDirect(target, strikeDmg, 'conspiracy_storm');
+          target.stun = Math.max(target.stun, 1.2);
+          game.vfx.lightning(target.x, target.z - 1.5, target.x, target.z, 0xffea00);
+          game.particles.burst(target.x, 1.2, target.z, 10, 0xffea00, { speed: 8, life: 0.3, size: 0.35 });
+        } else if (game.boss && game.boss.hittable && Math.hypot(game.boss.x - this.x, game.boss.z - this.z) <= 28) {
+          const strikeDmg = s.damage * 3.0;
+          game.hitBossDirect(strikeDmg, 'conspiracy_storm');
+          game.vfx.lightning(game.boss.x, game.boss.z - 1.5, game.boss.x, game.boss.z, 0xffea00);
+          game.particles.burst(game.boss.x, 1.5, game.boss.z, 14, 0xffea00, { speed: 9, life: 0.35, size: 0.35 });
+        }
+      }
+      if (this.robertoStormTimer <= 0) {
+        this.ultActive = false;
+        game.particles.burst(this.x, 1.5, this.z, 50, 0xffea00, { speed: 10, life: 0.8, size: 0.4 });
+      }
+    }
+  }
+
+  private updateBrenoCompanion(dt: number, game: Game) {
+    if (!this.brenoCompanion) return;
+    const b = this.brenoCompanion;
+    const s = this.stats;
+    b.life -= dt;
+
+    const brenoLvl = this.upgrades.hero_kaio_firestorm_breno ?? 0;
+
+    let targetXPos: number | null = null;
+    let targetZPos: number | null = null;
+    let hasTarget = false;
+
+    const nearestEnemy = game.enemies.nearest(b.x, b.z, 24);
+    let bestDistSq = nearestEnemy ? (nearestEnemy.x - b.x) ** 2 + (nearestEnemy.z - b.z) ** 2 : Infinity;
+    if (nearestEnemy) {
+      targetXPos = nearestEnemy.x;
+      targetZPos = nearestEnemy.z;
+      hasTarget = true;
+    }
+
+    if (game.boss && game.boss.hittable) {
+      const bossDistSq = (game.boss.x - b.x) ** 2 + (game.boss.z - b.z) ** 2;
+      if (bossDistSq <= 24 * 24 && bossDistSq < bestDistSq) {
+        bestDistSq = bossDistSq;
+        targetXPos = game.boss.x;
+        targetZPos = game.boss.z;
+        hasTarget = true;
+      }
+    }
+
+    let targetX = this.x + Math.sin(this.time * 2.5) * 3.5;
+    let targetZ = this.z + Math.cos(this.time * 2.5) * 3.5;
+    if (hasTarget && targetXPos !== null && targetZPos !== null) {
+      targetX = targetXPos - Math.sin(this.aimAngle) * 4;
+      targetZ = targetZPos - Math.cos(this.aimAngle) * 4;
+    }
+
+    const dx = targetX - b.x;
+    const dz = targetZ - b.z;
+    b.x += dx * Math.min(1, dt * 4.5);
+    b.z += dz * Math.min(1, dt * 4.5);
+    b.y = 1.6 + Math.sin(this.time * 6) * 0.25;
+
+    if (hasTarget && targetXPos !== null && targetZPos !== null) {
+      b.angle = Math.atan2(targetXPos - b.x, targetZPos - b.z);
+    } else {
+      b.angle = this.aimAngle;
+    }
+    b.group.position.set(b.x, b.y, b.z);
+    b.group.rotation.y = b.angle;
+
+    b.fireTimer -= dt;
+    const fireInterval = 0.16 / (1 + brenoLvl * 0.4);
+    if (b.fireTimer <= 0) {
+      b.fireTimer = fireInterval;
+      if (hasTarget && targetXPos !== null && targetZPos !== null) {
+        const aim = b.angle + rand(-0.15, 0.15);
+        const sp = 30 * s.projSpeed;
+        game.projectiles.spawn({
+          kind: 'flame',
+          x: b.x + Math.sin(aim) * 0.8,
+          z: b.z + Math.cos(aim) * 0.8,
+          y: b.y,
+          vx: Math.sin(aim) * sp,
+          vz: Math.cos(aim) * sp,
+          dmg: s.damage * (1.5 + brenoLvl * 0.3),
+          life: rand(0.35, 0.52),
+          radius: 0.65 * s.area,
+          pierce: 999,
+          color: 0xff3300,
+          scale: 1.2 * s.area,
+          trail: 0.6,
+          weaponSource: 'breno_companion',
+        });
+        game.particles.emit(b.x, b.y, b.z, Math.sin(aim) * 3, rand(1, 3), Math.cos(aim) * 3, 0.25, 0.3, 1, 0.3, 0, 0, 0, 1);
+        if (Math.random() < 0.35) game.audio.flamethrower();
+      }
+    }
+
+    if (Math.random() < 0.6) {
+      game.particles.emit(
+        b.x - Math.sin(b.angle) * 0.6 + rand(-0.2, 0.2),
+        b.y,
+        b.z - Math.cos(b.angle) * 0.6 + rand(-0.2, 0.2),
+        -Math.sin(b.angle) * 3, rand(-0.5, 0.5), -Math.cos(b.angle) * 3,
+        0.2, 0.25, 1, 0.4, 0.1, 0, 0, 0, 1
+      );
+    }
+
+    if (b.life <= 1.8) {
+      b.group.scale.setScalar(1 + Math.sin(this.time * 28) * 0.25);
+      game.particles.burst(b.x, b.y, b.z, 3, 0xff2200, { speed: 4, life: 0.2, size: 0.25 });
+    }
+
+    if (b.life <= 0) {
+      this.explodeBreno(game);
+    }
+  }
+
+  private explodeBreno(game: Game) {
+    if (!this.brenoCompanion) return;
+    const b = this.brenoCompanion;
+    const s = this.stats;
+    const brenoLvl = this.upgrades.hero_kaio_firestorm_breno ?? 0;
+    const isBrotherhood = this.ascensionPerk === 'kaio_breno_brotherhood';
+
+    const radius = (13 + brenoLvl * 4) * (isBrotherhood ? 1.6 : 1.0) * s.area;
+    const dmg = s.damage * (16 + brenoLvl * 6) * (isBrotherhood ? 1.3 : 1.0);
+
+    game.vfx.explosion(b.x, 1.2, b.z, 0xff3300, radius * 0.75, 4);
+    game.shockwaves.spawn(b.x, b.z, 0xff4500, { startR: 1, endR: radius, duration: 0.7, thick: true, intensity: 5 });
+    game.particles.burst(b.x, 1.2, b.z, 200, 0xff5500, { speed: 20, life: 1.0, size: 0.6, gravity: 4 });
+    game.domes.spawn(b.x, 1.2, b.z, 0xffaa00, radius * 0.9, 0.8);
+    game.camera.shake(0.7);
+    game.flash(0.6, 0xff5500);
+    game.audio.explosion(1.6);
+
+    query.length = 0;
+    game.enemies.query(b.x, b.z, radius + 2, query);
+    for (const e of query) {
+      if (!e.dead) {
+        const dx = e.x - b.x, dz = e.z - b.z;
+        if (Math.hypot(dx, dz) <= radius + e.radius * e.size) {
+          game.recordDamage(dmg, 'breno_explosion');
+          game.damageEnemy(e, dmg, true, 'normal');
+          game.enemies.applyBurn(e, dmg * 0.35, 5.0, 0xff4500);
+        }
+      }
+    }
+    if (game.boss && game.boss.hittable) {
+      const dx = game.boss.x - b.x, dz = game.boss.z - b.z;
+      if (Math.hypot(dx, dz) <= radius + game.boss.radius) {
+        game.hitBossDirect(dmg * 1.2, 'breno_explosion', true);
+      }
+    }
+    game.notice('BRENO EXPLODIU!', 'Explosão Termobárica de Chamas!', '#ff4500');
+
+    this.scene.remove(b.group);
+    this.brenoCompanion = null;
+    this.ultActive = false;
   }
 
   dispose() {
@@ -1850,6 +2457,10 @@ export class Player {
       this.scene.remove(t.group);
     }
     this.macedoTraps = [];
+    if (this.brenoCompanion) {
+      this.scene.remove(this.brenoCompanion.group);
+      this.brenoCompanion = null;
+    }
     this.ghosts.clearAll();
   }
 }
