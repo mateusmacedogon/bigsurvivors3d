@@ -248,13 +248,13 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'executioner', name: 'Protocolo Algoz', icon: '☠', base: 1, max: 1, unit: 'count', desc: () => '+40% de dano devastador contra inimigos com menos de 35% de vida' },
   { id: 'supercharge_laser', name: 'Foco Balístico Hiperdenso', icon: '🎯', base: 1, max: 1, unit: 'count', desc: () => '+20% de área e velocidade balística e +1 de perfuração adicional', exclude: ['otton', 'carlinhos'] },
 
-  // Armas Secundárias (Armas Ativas) - Desbloqueio Único (max: 1)
-  { id: 'weapon_missile', name: 'Pod de Micro-Mísseis', icon: '🚀', base: 1, max: 1, unit: 'count', desc: () => 'Instala lançador de micro-mísseis teleguiados de alta precisão' },
-  { id: 'weapon_saw', name: 'Lâminas Orbitais', icon: '⚙', base: 1, max: 1, unit: 'count', desc: () => 'Instala 3 lâminas rotativas de plasma que orbitam a nave cortando inimigos' },
-  { id: 'weapon_tesla', name: 'Bobina de Tesla', icon: '⚡', base: 1, max: 1, unit: 'count', desc: () => 'Instala bobina de Tesla que dispara arcos elétricos em cadeia entre monstros' },
-  { id: 'weapon_gravity', name: 'Poço Gravitacional', icon: '🌀', base: 1, max: 1, unit: 'count', desc: () => 'Instala emissor de vórtices gravitacionais que sugam e implodem inimigos' },
-  { id: 'weapon_flamethrower', name: 'Lança-Chamas de Plasma', icon: '🔥', base: 1, max: 1, unit: 'count', desc: () => 'Instala lança-chamas contínuo de plasma de curto alcance e alto DPS' },
-  { id: 'weapon_railgun', name: 'Canhão de Trilho Gauss', icon: '⚡', base: 1, max: 1, unit: 'count', desc: () => 'Instala canhão de trilho Gauss cinético de alta perfuração' },
+  // Armas Secundárias (Armas Ativas) - Até Nível 5 antes da Evolução (max: 5)
+  { id: 'weapon_missile', name: 'Pod de Micro-Mísseis', icon: '🚀', base: 1, max: 5, unit: 'count', desc: () => 'Instala ou aprimora o lançador de micro-mísseis teleguiados' },
+  { id: 'weapon_saw', name: 'Lâminas Orbitais', icon: '⚙', base: 1, max: 5, unit: 'count', desc: () => 'Instala ou aprimora as lâminas rotativas de plasma orbitais' },
+  { id: 'weapon_tesla', name: 'Bobina de Tesla', icon: '⚡', base: 1, max: 5, unit: 'count', desc: () => 'Instala ou aprimora a bobina de Tesla de arcos elétricos' },
+  { id: 'weapon_gravity', name: 'Poço Gravitacional', icon: '🌀', base: 1, max: 5, unit: 'count', desc: () => 'Instala ou aprimora o emissor de vórtices gravitacionais' },
+  { id: 'weapon_flamethrower', name: 'Lança-Chamas de Plasma', icon: '🔥', base: 1, max: 5, unit: 'count', desc: () => 'Instala ou aprimora o lança-chamas contínuo de plasma' },
+  { id: 'weapon_railgun', name: 'Canhão de Trilho Gauss', icon: '⚡', base: 1, max: 5, unit: 'count', desc: () => 'Instala ou aprimora o canhão de trilho Gauss cinético' },
 
   // Dash Especiais - Habilidades de Ativação Única (max: 1)
   { id: 'dash_flame', name: 'Rastro Flamejante', icon: '🔥', base: 1, max: 1, unit: 'count', desc: () => 'O propulsor do Dash incinera a arena deixando rastro contínuo de fogo no solo' },

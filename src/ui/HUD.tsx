@@ -547,9 +547,23 @@ export function HUD({ snap, game }: { snap: Snapshot; game: Game }) {
                 <span className="text-lg leading-none">{w.icon}</span>
                 <div className="flex flex-col">
                   <span className="text-[11px] font-display font-bold text-white leading-tight">{w.name}</span>
-                  <span className={`text-[10px] leading-tight font-display font-bold ${w.evolved ? 'text-yellow-300' : 'text-cyan-300'}`}>
-                    {w.evolved ? '👑 EVOLUÍDA' : `NV ${w.level}`}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] leading-tight font-display font-bold ${w.evolved ? 'text-yellow-300' : 'text-cyan-300'}`}>
+                      {w.evolved ? '👑 EVOLUÍDA' : `NV ${w.level}/5`}
+                    </span>
+                    {!w.evolved && w.id !== 'main' && (
+                      <div className="flex gap-0.5">
+                        {Array.from({ length: 5 }).map((_, lvlIdx) => (
+                          <div
+                            key={lvlIdx}
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              lvlIdx < w.level ? 'bg-cyan-400 shadow-[0_0_4px_#00e5ff]' : 'bg-white/20'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

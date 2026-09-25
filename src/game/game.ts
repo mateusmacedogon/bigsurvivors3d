@@ -784,10 +784,8 @@ export class Game {
       if (currentLvl >= u.max) return false;
       const secId = UPGRADE_TO_SECONDARY[u.id];
       if (secId) {
-        if (this.player.secondaryWeapons.has(secId)) {
-          return false;
-        }
-        if (this.player.secondaryWeapons.size >= 4) {
+        const hasSec = this.player.secondaryWeapons.has(secId);
+        if (!hasSec && this.player.secondaryWeapons.size >= 4) {
           return false;
         }
       }
@@ -904,6 +902,7 @@ export class Game {
     if (this.phase !== 'levelup') return;
     const c = this.choices.find(x => x.id === id);
     if (!c) return;
+    const isEvo = c.isEvolution;
     this.player.applyUpgrade(id, c.value);
     this.upgradeLevels[id] = (this.upgradeLevels[id] ?? 0) + 1;
     this._cachedUpgradesDirty = true;
@@ -914,9 +913,18 @@ export class Game {
     if (this.player.stats.speed >= (heroById(this.heroId).speed * 1.5)) {
       this.checkAchievement('speed_demon');
     }
-    this.audio.cardPick();
-    this.particles.ring(this.player.x, 1, this.player.z, 40, this.player.hero.color, 1.5, 10, 0.7, 0.4);
-    this.shockwaves.spawn(this.player.x, this.player.z, this.player.hero.color, { endR: 10, duration: 0.6 });
+    if (isEvo) {
+      this.audio.ascension();
+      this.flash(0.5, 0xffd700);
+      this.notice('EVOLUÇÃO DESPERTA!', `${c.name.toUpperCase()} ATIVADA!`, '#ffd700');
+      this.particles.burst(this.player.x, 1.5, this.player.z, 120, 0xffd700, { speed: 16, life: 1.0, size: 0.5 });
+      this.shockwaves.spawn(this.player.x, this.player.z, 0xffd700, { endR: 16, duration: 0.8, thick: true, intensity: 4 });
+      this.camera.shake(0.5);
+    } else {
+      this.audio.cardPick();
+      this.particles.ring(this.player.x, 1, this.player.z, 40, this.player.hero.color, 1.5, 10, 0.7, 0.4);
+      this.shockwaves.spawn(this.player.x, this.player.z, this.player.hero.color, { endR: 10, duration: 0.6 });
+    }
     this.choices = [];
     if (this.pendingLevels > 0) this.openLevelUp();
     else this.setPhase('playing');
