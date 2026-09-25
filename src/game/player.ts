@@ -1549,6 +1549,7 @@ export class Player {
     for (const [id, sec] of this.secondaryWeapons) {
       const def = SECONDARY_WEAPONS[id];
       sec.timer -= dt;
+      const levelMult = 1 + (sec.level - 1) * 0.25;
 
       if (id === 'orbital_saw') {
         // As lâminas orbitais permanecem ativas ao redor da nave
@@ -1559,7 +1560,7 @@ export class Player {
             activeCount++;
             if (sec.evolved && p.weaponSource !== 'stellar_saw') {
               p.weaponSource = 'stellar_saw';
-              p.dmg = def.baseDmg * 1.8 * (s.damage / this.hero.damage);
+              p.dmg = def.baseDmg * 1.8 * levelMult * (s.damage / this.hero.damage);
               p.scale = s.area * 1.4;
               p.r = 0; p.g = 1; p.b = 1;
             }
@@ -1577,7 +1578,7 @@ export class Player {
               z: this.z + Math.sin(orbitAngle) * ring,
               y: 1.0,
               vx: 0, vz: 0,
-              dmg: def.baseDmg * (sec.evolved ? 1.8 : 1.0) * (s.damage / this.hero.damage),
+              dmg: def.baseDmg * (sec.evolved ? 1.8 : 1.0) * levelMult * (s.damage / this.hero.damage),
               life: 14,
               radius: 0.9 * s.area,
               color: sec.evolved ? def.evoColor : def.color,
@@ -1595,7 +1596,7 @@ export class Player {
           const cd = (def.cooldown * (sec.evolved ? 0.65 : 0.9)) / s.fireRate;
           sec.timer = cd;
           const count = (sec.evolved ? 6 : 3) + s.multishot;
-          const dmg = def.baseDmg * (sec.evolved ? 2.2 : 1.1) * (s.damage / this.hero.damage);
+          const dmg = def.baseDmg * (sec.evolved ? 2.2 : 1.1) * levelMult * (s.damage / this.hero.damage);
           for (let i = 0; i < count; i++) {
             const a = this.aimAngle + rand(-1.2, 1.2);
             const sp = rand(24, 32) * s.projSpeed;
@@ -1622,14 +1623,14 @@ export class Player {
           const cd = (def.cooldown * (sec.evolved ? 0.65 : 0.9)) / s.fireRate;
           sec.timer = cd;
           const jumps = (sec.evolved ? 12 : 4) + s.multishot * 2;
-          const dmg = def.baseDmg * (sec.evolved ? 2.2 : 1.1) * (s.damage / this.hero.damage);
+          const dmg = def.baseDmg * (sec.evolved ? 2.2 : 1.1) * levelMult * (s.damage / this.hero.damage);
           game.projectiles.fireTeslaChain(this.x, this.z, dmg, jumps, game, sec.evolved);
         } else if (id === 'gravity_well') {
           const cd = (def.cooldown * (sec.evolved ? 0.65 : 0.9)) / s.fireRate;
           sec.timer = cd;
           const a = this.aimAngle;
           const sp = 18 * s.projSpeed;
-          const dmg = def.baseDmg * (sec.evolved ? 2.4 : 1.1) * (s.damage / this.hero.damage);
+          const dmg = def.baseDmg * (sec.evolved ? 2.4 : 1.1) * levelMult * (s.damage / this.hero.damage);
           game.projectiles.spawn({
             kind: 'vortex',
             x: this.x + Math.sin(a) * 1.5,
@@ -1650,12 +1651,12 @@ export class Player {
         } else if (id === 'flamethrower') {
           const cd = (def.cooldown * (sec.evolved ? 0.75 : 1.0)) / s.fireRate;
           sec.timer = cd;
-          const dmg = def.baseDmg * (sec.evolved ? 2.5 : 1.0) * (s.damage / this.hero.damage);
+          const dmg = def.baseDmg * (sec.evolved ? 2.5 : 1.0) * levelMult * (s.damage / this.hero.damage);
           game.projectiles.fireFlamethrower(this.x, this.z, this.aimAngle, dmg, sec.evolved, game, s.multishot);
         } else if (id === 'railgun') {
           const cd = (def.cooldown * (sec.evolved ? 0.7 : 0.9)) / s.fireRate;
           sec.timer = cd;
-          const dmg = def.baseDmg * (sec.evolved ? 2.6 : 1.0) * (s.damage / this.hero.damage);
+          const dmg = def.baseDmg * (sec.evolved ? 2.6 : 1.0) * levelMult * (s.damage / this.hero.damage);
           game.projectiles.fireRailgun(this.x, this.z, this.aimAngle, dmg, sec.evolved, game);
           for (let i = 1; i <= s.multishot; i++) {
             game.projectiles.fireRailgun(this.x, this.z, this.aimAngle + i * 0.12, dmg * 0.85, sec.evolved, game);
